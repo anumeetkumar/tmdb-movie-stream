@@ -71,21 +71,41 @@ function decryptGCM(encryptedBase64, keyStr) {
     }
 }
 
+// Cached API Key state to speed up resolving
+let cachedApiKey = null;
+let cachedApiKeyTime = 0;
+const API_KEY_TTL = 10 * 60 * 1000; // 10 minutes cache
+
+async function getOrFetchApiKey() {
+    const now = Date.now();
+    if (cachedApiKey && (now - cachedApiKeyTime < API_KEY_TTL)) {
+        return cachedApiKey;
+    }
+    try {
+        const keyRes = await axios.get(API_KEY_URL, { headers: VIDZEE_HEADERS, timeout: 5000 });
+        const encryptedKey = keyRes.data;
+        if (!encryptedKey) return null;
+        const apiKey = decryptGCM(encryptedKey, PASSPHRASE);
+        if (apiKey) {
+            cachedApiKey = apiKey;
+            cachedApiKeyTime = now;
+        }
+        return apiKey;
+    } catch (e) {
+        console.error(`[Vidzee] Failed to fetch API key: ${e.message}`);
+        return cachedApiKey; // Fallback to expired key if network fails
+    }
+}
+
 async function getVidzeeStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = null, sr = null) {
     // If sr is not provided (e.g. for generic aggregate streams endpoint), resolve popular servers concurrently
     if (sr === null) {
         console.log(`[Vidzee] Aggregate query for TMDB ID: ${tmdbId}. Resolving top servers concurrently.`);
         try {
-            // Step 1: Fetch and decrypt the master API key
-            const keyRes = await axios.get(API_KEY_URL, { headers: VIDZEE_HEADERS, timeout: 5000 });
-            const encryptedKey = keyRes.data;
-            if (!encryptedKey) {
-                console.error('[Vidzee] Failed to fetch API key.');
-                return [];
-            }
-            const apiKey = decryptGCM(encryptedKey, PASSPHRASE);
+            // Step 1: Get the decrypted API key (cached or fetched)
+            const apiKey = await getOrFetchApiKey();
             if (!apiKey) {
-                console.error('[Vidzee] Failed to decrypt API key.');
+                console.error('[Vidzee] Failed to obtain API key.');
                 return [];
             }
 
@@ -156,17 +176,10 @@ async function getVidzeeStreams(tmdbId, mediaType = 'movie', seasonNum = null, e
             return [];
         }
 
-        // Step 1: Fetch and decrypt the master API key
-        const keyRes = await axios.get(API_KEY_URL, { headers: VIDZEE_HEADERS, timeout: 5000 });
-        const encryptedKey = keyRes.data;
-        if (!encryptedKey) {
-            console.error('[Vidzee] Failed to fetch API key.');
-            return [];
-        }
-
-        const apiKey = decryptGCM(encryptedKey, PASSPHRASE);
+        // Step 1: Get the decrypted API key (cached or fetched)
+        const apiKey = await getOrFetchApiKey();
         if (!apiKey) {
-            console.error('[Vidzee] Failed to decrypt API key.');
+            console.error('[Vidzee] Failed to obtain API key.');
             return [];
         }
 

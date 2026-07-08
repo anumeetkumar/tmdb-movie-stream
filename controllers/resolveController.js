@@ -206,8 +206,48 @@ async function resolveAll(req, res) {
   }
 }
 
+// Route 3: Dedicated fast direct Vidzee stream scraper (returns direct CDN link without proxy)
+async function resolveFastVidzeeStream(req, res) {
+  const { type, id } = req.params;
+  const tmdbId = id;
+  const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
+  const providerType = normalizedType === 'tv' ? 'series' : 'movie';
+
+  const season = req.query.season || req.query.s ? Number(req.query.season || req.query.s) : null;
+  const episode = req.query.episode || req.query.e ? Number(req.query.episode || req.query.e) : null;
+
+  try {
+    const { getVidzeeStreams } = require('../providers/vidzee');
+    // Fetch specifically server 7 (Hindi)
+    const streams = await getVidzeeStreams(tmdbId, providerType, season, episode, '7');
+
+    if (!streams || streams.length === 0) {
+      return res.status(404).json({ success: false, error: 'NO_STREAM_FOUND', message: 'No Vidzee Hindi stream found' });
+    }
+
+    const targetStream = streams[0];
+    if (req.query.redirect === 'true') {
+      return res.redirect(302, targetStream.url);
+    }
+
+    res.json({
+      success: true,
+      tmdbId,
+      provider: 'Vidzee',
+      server: 'Hindi (sr=7)',
+      url: targetStream.url,
+      subtitles: targetStream.subtitles || []
+    });
+
+  } catch (err) {
+    console.error('[Resolver-Fast-Vidzee] Error:', err.message);
+    res.status(500).json({ success: false, error: 'FAST_RESOLVE_ERROR', message: err.message });
+  }
+}
+
 module.exports = {
   resolveFast,
   resolveAll,
+  resolveFastVidzeeStream,
   formatStreamsHelper
 };
