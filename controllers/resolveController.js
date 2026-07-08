@@ -36,8 +36,14 @@ async function resolveFast(req, res) {
   const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
   const providerType = normalizedType === 'tv' ? 'series' : 'movie';
 
-  const season = req.query.season || req.query.s ? Number(req.query.season || req.query.s) : null;
-  const episode = req.query.episode || req.query.e ? Number(req.query.episode || req.query.e) : null;
+  const extractNum = (val) => {
+    if (!val) return null;
+    const m = String(val).match(/\d+/);
+    return m ? Number(m[0]) : null;
+  };
+
+  const season = req.query.season ? extractNum(req.query.season) : (req.query.s ? extractNum(req.query.s) : null);
+  const episode = req.query.episode ? extractNum(req.query.episode) : (req.query.e ? extractNum(req.query.e) : null);
   const forceRefresh = req.query.force === 'true' || req.query.forceRefresh === 'true';
 
   // 1. Check TTL Cache
@@ -135,8 +141,14 @@ async function resolveAll(req, res) {
   const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
   const providerType = normalizedType === 'tv' ? 'series' : 'movie';
 
-  const season = req.query.season || req.query.s ? Number(req.query.season || req.query.s) : null;
-  const episode = req.query.episode || req.query.e ? Number(req.query.episode || req.query.e) : null;
+  const extractNum = (val) => {
+    if (!val) return null;
+    const m = String(val).match(/\d+/);
+    return m ? Number(m[0]) : null;
+  };
+
+  const season = req.query.season ? extractNum(req.query.season) : (req.query.s ? extractNum(req.query.s) : null);
+  const episode = req.query.episode ? extractNum(req.query.episode) : (req.query.e ? extractNum(req.query.e) : null);
   const forceRefresh = req.query.force === 'true' || req.query.forceRefresh === 'true';
 
   // Check TTL Cache
@@ -213,8 +225,14 @@ async function resolveFastVidzeeStream(req, res) {
   const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
   const providerType = normalizedType === 'tv' ? 'series' : 'movie';
 
-  const season = req.query.season || req.query.s ? Number(req.query.season || req.query.s) : null;
-  const episode = req.query.episode || req.query.e ? Number(req.query.episode || req.query.e) : null;
+  const extractNum = (val) => {
+    if (!val) return null;
+    const m = String(val).match(/\d+/);
+    return m ? Number(m[0]) : null;
+  };
+
+  const season = req.query.season ? extractNum(req.query.season) : (req.query.s ? extractNum(req.query.s) : null);
+  const episode = req.query.episode ? extractNum(req.query.episode) : (req.query.e ? extractNum(req.query.e) : null);
 
   try {
     const { getVidzeeStreams } = require('../providers/vidzee');

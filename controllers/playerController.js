@@ -9,8 +9,15 @@ const { config } = require('../utils/config');
 async function playStream(req, res) {
   const { type, id } = req.params;
   const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
-  const season = req.query.season || req.query.s ? Number(req.query.season || req.query.s) : null;
-  const episode = req.query.episode || req.query.e ? Number(req.query.episode || req.query.e) : null;
+  // Auto-correct malformed query strings like ?e=1?s=1 by extracting digits from params
+  const extractNum = (val) => {
+    if (!val) return null;
+    const m = String(val).match(/\d+/);
+    return m ? Number(m[0]) : null;
+  };
+
+  const season = req.query.season ? extractNum(req.query.season) : (req.query.s ? extractNum(req.query.s) : null);
+  const episode = req.query.episode ? extractNum(req.query.episode) : (req.query.e ? extractNum(req.query.e) : null);
 
   // 1. Fetch TMDB Metadata only (fast — no stream fetching blocks this)
   let mediaTitle = `${type.toUpperCase()} - ${id}`;
