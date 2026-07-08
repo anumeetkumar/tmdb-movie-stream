@@ -237,7 +237,7 @@ async function resolveFastVidzeeStream(req, res) {
   try {
     const { getVidzeeStreams } = require('../providers/vidzee');
     // Fetch specifically server 7 (Hindi)
-    const streams = await getVidzeeStreams(tmdbId, providerType, season, episode, '7');
+    const streams = await getVidzeeStreams(tmdbId, normalizedType, season, episode, '7');
 
     if (!streams || streams.length === 0) {
       return res.status(404).json({ success: false, error: 'NO_STREAM_FOUND', message: 'No Vidzee Hindi stream found' });
