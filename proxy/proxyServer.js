@@ -477,8 +477,8 @@ function processStreamsForProxy(streams, serverUrl) {
         } catch {
             // Ignore errors
         }
-        if (host.includes('111477.xyz')) {
-            return s; // DahmerMovies is already proxied via its own worker; skip local proxy wrapping to avoid 429 rate limits
+        if (host.includes('111477.xyz') || host.endsWith('fvncw.com') || host.endsWith('bxncw.com')) {
+            return s; // DahmerMovies/Vidzee CDNs play directly without proxy to avoid 429s/403s
         }
         // Force specific hosts through ts-proxy (direct file style) even without extension
         if (host.includes('pixeldrain.') || host === 'video-downloads.googleusercontent.com') {

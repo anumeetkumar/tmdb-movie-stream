@@ -358,7 +358,20 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, 
 
                 // Merge streams: we want to keep the currently playing/resolved streams intact,
                 // but populate the select with the full list.
-                var oldPlayingUrl = (streams[currentIdx] || {}).url;
+                var oldPlayingStream = streams[currentIdx];
+                
+                // If fast stream was loaded and is missing from full list, prepend it
+                if (fastStreamLoaded && streams.length > 0) {
+                    var fastStream = streams[0];
+                    var exists = fetched.some(function(s) {
+                        return s.url === fastStream.url || 
+                               (s.provider === fastStream.provider && s.name === fastStream.name);
+                    });
+                    if (!exists) {
+                        fetched.unshift(fastStream);
+                    }
+                }
+
                 streams = fetched;
 
                 // Update select dropdown with all resolved streams
@@ -367,9 +380,10 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, 
 
                 // Find index of the currently playing stream in the new list to keep selection aligned
                 var foundMatchIdx = -1;
-                if (oldPlayingUrl) {
+                if (oldPlayingStream) {
                     for (var i = 0; i < streams.length; i++) {
-                        if (streams[i].url === oldPlayingUrl) {
+                        if (streams[i].url === oldPlayingStream.url ||
+                            (streams[i].provider === oldPlayingStream.provider && streams[i].name === oldPlayingStream.name)) {
                             foundMatchIdx = i;
                             break;
                         }
