@@ -10,12 +10,12 @@ const VIDZEE_HEADERS = {
 };
 
 const SERVERS = [
-    { sr: '0', name: 'Togi', audioLanguage: 'English' },
+    { sr: '7', name: 'Hindi', audioLanguage: 'Hindi' },
     { sr: '3', name: 'Achilles', audioLanguage: 'English' },
     { sr: '4', name: 'Nflix', audioLanguage: 'English' },
     { sr: '5', name: 'Drag', audioLanguage: 'English' },
+    { sr: '0', name: 'Togi', audioLanguage: 'English' },
     { sr: '6', name: 'Viet', audioLanguage: 'Vietnamese' },
-    { sr: '7', name: 'Hindi', audioLanguage: 'Hindi' },
     { sr: '8', name: 'Bengali', audioLanguage: 'Bengali' },
     { sr: '9', name: 'Tamil', audioLanguage: 'Tamil' },
     { sr: '10', name: 'Telugu', audioLanguage: 'Telugu' },
@@ -89,8 +89,8 @@ async function getVidzeeStreams(tmdbId, mediaType = 'movie', seasonNum = null, e
                 return [];
             }
 
-            // Only resolve English and Hindi servers to remain fast
-            const activeServers = SERVERS.filter(s => ['0', '3', '4', '5', '7'].includes(s.sr));
+            // sr=7 (Hindi) first — most reliable CDN, then top English servers
+            const activeServers = SERVERS.filter(s => ['7', '3', '4', '5', '0'].includes(s.sr));
 
             const resolvedStreams = await Promise.all(activeServers.map(async (server) => {
                 let apiUrl = `https://player.vidzee.wtf/api/server?id=${tmdbId}&sr=${server.sr}`;
