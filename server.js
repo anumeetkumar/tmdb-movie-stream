@@ -21,8 +21,15 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, service: 'fast-stream-resolver', time: new Date().toISOString() });
 });
 
+const path = require('path');
+
 // Serve static playground assets from public directory
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Explicit route for GET / to serve index.html directly
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Register MVC Routers
 app.use('/api', apiRoutes);
