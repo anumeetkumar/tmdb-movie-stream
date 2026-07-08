@@ -2,81 +2,7 @@
  * Views Layer - Dynamic Player Layouts and Templates
  */
 
-function renderLoadingPage(mediaTitle) {
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <title>Loading Stream... - ${mediaTitle}</title>
-      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-      <style>
-        body {
-          font-family: 'Outfit', sans-serif;
-          background: radial-gradient(circle at center, #111b2d 0%, #080c14 100%);
-          color: #fff;
-          height: 100vh;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          margin: 0;
-        }
-        .card {
-          background: rgba(255, 255, 255, 0.03);
-          backdrop-filter: blur(16px);
-          border: 1px rgba(255, 255, 255, 0.08) solid;
-          padding: 40px;
-          border-radius: 24px;
-          text-align: center;
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-          max-width: 500px;
-        }
-        h2 { font-weight: 800; margin-bottom: 12px; color: #00f2fe; }
-        p { color: #8a99ad; margin-bottom: 24px; font-size: 15px; line-height: 1.5; }
-        .spinner {
-          border: 4px solid rgba(255,255,255,0.1);
-          width: 48px;
-          height: 48px;
-          border-radius: 50%;
-          border-left-color: #00f2fe;
-          animation: spin 1s linear infinite;
-          margin: 0 auto 20px auto;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .btn {
-          background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-          border: none;
-          color: #fff;
-          padding: 12px 24px;
-          border-radius: 12px;
-          font-weight: 600;
-          cursor: pointer;
-          text-decoration: none;
-          box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
-        }
-      </style>
-      <script>
-        // Auto refresh page after 4.5 seconds to check scraper progress
-        setTimeout(() => location.reload(), 4500);
-      </script>
-    </head>
-    <body>
-      <div class="card">
-        <div class="spinner"></div>
-        <h2>Resolving Video Streams</h2>
-        <p>We are concurrently scraping and validating the fastest stream links for <b>${mediaTitle}</b>. This usually takes 3 to 6 seconds on first load.</p>
-        <p style="font-size:12px; color:#556880;">Page will automatically reload to play once ready.</p>
-        <button class="btn" onclick="location.reload()">Manual Check</button>
-      </div>
-    </body>
-    </html>
-  `;
-}
-
-function renderPlayerPage(mediaTitle, mediaSubtitle, streams, rawLinksUrl) {
-  const defaultStream = streams[0];
-  
+function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, posterUrl) {
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -124,6 +50,8 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, streams, rawLinksUrl) {
                 align-items: center;
                 border-bottom: 1px rgba(255, 255, 255, 0.08) solid;
                 padding-bottom: 16px;
+                flex-wrap: wrap;
+                gap: 12px;
             }
             .title-area h1 {
                 font-size: 24px;
@@ -146,6 +74,7 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, streams, rawLinksUrl) {
                 font-size: 13px;
                 color: #8a99ad;
                 font-weight: 600;
+                white-space: nowrap;
             }
             .source-select {
                 background: rgba(255, 255, 255, 0.05);
@@ -166,10 +95,7 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, streams, rawLinksUrl) {
                 background: rgba(255, 255, 255, 0.1);
                 border-color: rgba(255, 255, 255, 0.2);
             }
-            .source-select option {
-                background: #0f172a;
-                color: #fff;
-            }
+            .source-select option { background: #0f172a; color: #fff; }
             .player-wrapper {
                 position: relative;
                 width: 100%;
@@ -180,48 +106,61 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, streams, rawLinksUrl) {
                 box-shadow: 0 10px 30px rgba(0,0,0,0.4);
                 border: 1px rgba(255, 255, 255, 0.05) solid;
             }
-            #player {
-                width: 100%;
-                height: 100%;
+            #player { width: 100%; height: 100%; }
+
+            /* Loading skeleton overlay */
+            #loading-overlay {
+                position: absolute;
+                inset: 0;
+                background: rgba(8, 12, 20, 0.92);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                z-index: 20;
+                gap: 16px;
+                border-radius: 16px;
+                transition: opacity 0.4s ease;
             }
+            #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+            .load-spinner {
+                width: 44px; height: 44px;
+                border: 4px solid rgba(255,255,255,0.1);
+                border-left-color: #00f2fe;
+                border-radius: 50%;
+                animation: spin 0.9s linear infinite;
+            }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            .load-text { color: #8a99ad; font-size: 14px; font-weight: 600; }
+            .load-subtext { color: #3d5166; font-size: 12px; }
+
             .footer {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 font-size: 13px;
                 color: #63758d;
+                flex-wrap: wrap;
+                gap: 10px;
             }
             .btn {
                 background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-                border: none;
-                color: #fff;
-                padding: 10px 20px;
-                border-radius: 12px;
-                font-weight: 600;
-                cursor: pointer;
-                text-decoration: none;
-                transition: all 0.3s ease;
+                border: none; color: #fff;
+                padding: 10px 20px; border-radius: 12px;
+                font-weight: 600; cursor: pointer;
+                text-decoration: none; transition: all 0.3s ease;
                 box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
             }
-            .btn:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4);
-            }
+            .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(79, 172, 254, 0.4); }
             .btn-secondary {
                 background: rgba(255, 255, 255, 0.05);
                 border: 1px solid rgba(255, 255, 255, 0.1);
-                color: #ccc;
-                box-shadow: none;
+                color: #ccc; box-shadow: none;
             }
-            .btn-secondary:hover {
-                background: rgba(255, 255, 255, 0.1);
-                color: #fff;
-                box-shadow: none;
-            }
-            .controls-info {
-                display: flex;
-                gap: 15px;
-            }
+            .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); color: #fff; box-shadow: none; }
+            .controls-info { display: flex; gap: 15px; flex-wrap: wrap; }
+            .stream-count { font-size: 12px; color: #3d5166; }
+            #stream-status { font-size: 13px; font-weight: 600; color: #00f2fe; }
         </style>
     </head>
     <body>
@@ -233,104 +172,150 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, streams, rawLinksUrl) {
                 </div>
                 <div class="source-select-area">
                     <span class="source-label">Source:</span>
-                    <select id="source-select" class="source-select">
-                        ${streams.map((s, idx) => `
-                            <option value="${idx}">[${s.provider}] ${s.name} (${s.quality})</option>
-                        `).join('')}
+                    <select id="source-select" class="source-select" disabled>
+                        <option>Loading streams...</option>
                     </select>
                 </div>
             </div>
             <div class="player-wrapper">
                 <div id="player"></div>
+                <div id="loading-overlay">
+                    <div class="load-spinner"></div>
+                    <div class="load-text" id="load-text">Fetching streams...</div>
+                    <div class="load-subtext">Scraping providers in parallel</div>
+                </div>
             </div>
             <div class="footer">
                 <div class="controls-info">
                     <span>Space: Play/Pause</span>
                     <span>Double Click: Fullscreen</span>
-                    <span>Supports casting</span>
+                    <span id="stream-status"></span>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <a class="btn btn-secondary" href="${rawLinksUrl}" target="_blank">Raw Links</a>
+                    <a class="btn btn-secondary" id="raw-links-btn" href="${resolveUrl}" target="_blank">Raw Links</a>
                     <button class="btn" onclick="location.reload()">Reload</button>
                 </div>
             </div>
         </div>
         <script>
-            const streams = ${JSON.stringify(streams)};
+            const RESOLVE_URL = '${resolveUrl}';
+            const POSTER = '${posterUrl}';
+
+            const isHls = (url) => url && (url.includes('.m3u8') || url.includes('m3u8-proxy'));
+            const overlay = document.getElementById('loading-overlay');
+            const loadText = document.getElementById('load-text');
             const select = document.getElementById('source-select');
-            
-            const isHls = (url) => url.includes('.m3u8') || url.includes('m3u8-proxy');
+            const statusEl = document.getElementById('stream-status');
 
-            // Initialize player with the first stream source
-            const art = new Artplayer({
-                container: '#player',
-                url: streams[0].url,
-                type: isHls(streams[0].url) ? 'm3u8' : 'video',
-                customType: {
-                    m3u8: function (video, url) {
-                        if (Hls.isSupported()) {
-                            const hls = new Hls();
-                            hls.loadSource(url);
-                            hls.attachMedia(video);
-                        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                            video.src = url;
-                        }
-                    },
-                },
-                volume: 0.8,
-                isLive: false,
-                muted: false,
-                autoplay: true,
-                pip: true,
-                autoSize: true,
-                autoMini: true,
-                screenshot: true,
-                setting: true,
-                loop: false,
-                flip: true,
-                playbackRate: true,
-                aspectRatio: true,
-                fullscreen: true,
-                fullscreenWeb: true,
-                subtitleOffset: true,
-                miniProgressBar: true,
-                mutex: true,
-                backdrop: true,
-                playsInline: true,
-                autoPlayback: true,
-                airplay: true,
-                theme: '#00f2fe',
-                moreVideoAttr: {
-                    crossOrigin: 'anonymous',
+            let art = null;
+            let streams = [];
+
+            function initPlayer(stream) {
+                if (art) {
+                    art.switchUrl(stream.url).catch(() => {});
+                    return;
                 }
-            });
+                art = new Artplayer({
+                    container: '#player',
+                    url: stream.url,
+                    type: isHls(stream.url) ? 'm3u8' : 'video',
+                    poster: POSTER,
+                    customType: {
+                        m3u8: function (video, url) {
+                            if (Hls.isSupported()) {
+                                const hls = new Hls({ enableWorker: true });
+                                hls.loadSource(url);
+                                hls.attachMedia(video);
+                                video._hls = hls;
+                            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                                video.src = url;
+                            }
+                        },
+                    },
+                    volume: 0.8, isLive: false, muted: false,
+                    autoplay: true, pip: true, autoSize: true,
+                    autoMini: true, screenshot: true, setting: true,
+                    loop: false, flip: true, playbackRate: true,
+                    aspectRatio: true, fullscreen: true, fullscreenWeb: true,
+                    subtitleOffset: true, miniProgressBar: true, mutex: true,
+                    backdrop: true, playsInline: true, autoPlayback: true,
+                    airplay: true, theme: '#00f2fe',
+                    moreVideoAttr: { crossOrigin: 'anonymous' }
+                });
 
-            // Handle dynamic source switching on select change
+                // Auto try next source on error
+                art.on('error', () => {
+                    const idx = parseInt(select.value, 10);
+                    if (idx < streams.length - 1) {
+                        console.warn('[Player] Stream error, trying next source...');
+                        select.value = idx + 1;
+                        select.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
+
+            function populateSelect(streamList) {
+                select.innerHTML = '';
+                streamList.forEach((s, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = idx;
+                    opt.textContent = '[' + s.provider + '] ' + (s.name || s.title || 'Stream') + ' (' + (s.quality || 'Auto') + ')';
+                    select.appendChild(opt);
+                });
+                select.disabled = false;
+            }
+
+            async function loadStreams() {
+                loadText.textContent = 'Fetching streams...';
+                try {
+                    const res = await fetch(RESOLVE_URL, { cache: 'no-store' });
+                    const data = await res.json();
+                    streams = (data.streams || []).filter(s => s && s.url);
+
+                    if (streams.length === 0) {
+                        loadText.textContent = 'No streams found. Retrying...';
+                        setTimeout(loadStreams, 4000);
+                        return;
+                    }
+
+                    populateSelect(streams);
+                    statusEl.textContent = streams.length + ' stream(s) loaded';
+
+                    // Hide overlay and play first stream
+                    overlay.classList.add('hidden');
+                    setTimeout(() => overlay.style.display = 'none', 400);
+                    initPlayer(streams[0]);
+
+                } catch (err) {
+                    loadText.textContent = 'Error fetching streams. Retrying...';
+                    setTimeout(loadStreams, 4000);
+                }
+            }
+
+            // Handle source switching
             select.addEventListener('change', (e) => {
-                const index = parseInt(e.target.value, 10);
-                const stream = streams[index];
-                if (stream) {
-                    console.log('Switching stream to:', stream.provider, stream.url);
+                const idx = parseInt(e.target.value, 10);
+                const stream = streams[idx];
+                if (!stream) return;
+                console.log('[Player] Switching to:', stream.provider, stream.url);
+                if (art) {
                     const type = isHls(stream.url) ? 'm3u8' : 'video';
-                    
-                    // Switch ArtPlayer source URL dynamically
-                    art.switchUrl(stream.url).then(() => {
-                        art.play();
-                    }).catch(() => {
-                        // Fallback re-init
+                    art.switchUrl(stream.url, type).then(() => art.play()).catch(() => {
                         art.url = stream.url;
                         art.type = type;
                         art.play();
                     });
+                } else {
+                    initPlayer(stream);
                 }
             });
+
+            // Start fetching immediately
+            loadStreams();
         </script>
     </body>
     </html>
   `;
 }
 
-module.exports = {
-  renderLoadingPage,
-  renderPlayerPage
-};
+module.exports = { renderPlayerPage };
