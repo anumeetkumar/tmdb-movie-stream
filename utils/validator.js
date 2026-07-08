@@ -12,9 +12,6 @@ async function isValidStream(stream, timeoutMs = 1500) {
   // Reject placeholder URLs (they must be decrypted/resolved first)
   if (stream.url.startsWith('placeholder_')) return false;
 
-  // Skip active validation for DahmerMovies worker (it rate-limits multiple parallel requests with 429)
-  if (stream.url.includes('111477.xyz')) return true;
-
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
     ...(stream.headers || {})
@@ -56,13 +53,31 @@ async function isValidStream(stream, timeoutMs = 1500) {
 async function filterValidStreams(streams, timeoutMs = 1500) {
   if (!Array.isArray(streams) || streams.length === 0) return [];
 
-  const validationPromises = streams.map(async (stream) => {
+  // Separate DahmerMovies streams from normal streams
+  const dahmerStreams = streams.filter(s => s.url && s.url.includes('111477.xyz'));
+  const otherStreams = streams.filter(s => !s.url || !s.url.includes('111477.xyz'));
+
+  // Validate other streams in parallel (extremely fast)
+  const otherPromises = otherStreams.map(async (stream) => {
     const valid = await isValidStream(stream, timeoutMs);
     return valid ? stream : null;
   });
 
-  const results = await Promise.all(validationPromises);
-  return results.filter(Boolean);
+  // Validate DahmerMovies streams sequentially with a delay to avoid 429 rate limit
+  const verifiedDahmer = [];
+  for (let i = 0; i < dahmerStreams.length; i++) {
+    const stream = dahmerStreams[i];
+    if (i > 0) {
+      await new Promise(r => setTimeout(r, 650)); // 650ms gap
+    }
+    const valid = await isValidStream(stream, timeoutMs);
+    if (valid) {
+      verifiedDahmer.push(stream);
+    }
+  }
+
+  const verifiedOthers = (await Promise.all(otherPromises)).filter(Boolean);
+  return [...verifiedOthers, ...verifiedDahmer];
 }
 
 module.exports = { isValidStream, filterValidStreams };
