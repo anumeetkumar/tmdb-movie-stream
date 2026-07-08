@@ -16,6 +16,7 @@ const providerFunctionMap = {
   'notorrent.js': 'getNotorrentStreams',
   'dahmermovies.js': 'getDahmermoviesStreams',
   'vidzee.js': 'getVidzeeStreams',
+  'nxsha.js': 'getNxshaStreams',
 };
 
 // Stats for debug endpoint

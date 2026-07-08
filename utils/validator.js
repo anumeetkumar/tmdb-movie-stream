@@ -6,11 +6,29 @@ const axios = require('axios');
  * @param {number} timeoutMs - Timeout in milliseconds.
  * @returns {Promise<boolean>} - True if valid, false otherwise.
  */
+// Known CDN/hosting domains that are pre-validated and may block HEAD checks
+const TRUSTED_BYPASS_PATTERNS = [
+  'r2.cloudflarestorage.com',
+  'pixeldrain.dev',
+  'pixeldrain.com',
+  'hubcloud.cx',
+  'pixel.hubcloud.cx',
+  'cloudflarestorage.com',
+  'valhallastream.dpdns.org',
+  'kkphimplayer',
+  'gametechstore.shop',
+  'hakunaymatata.com',
+  'streamflixserver.site',
+];
+
 async function isValidStream(stream, timeoutMs = 1500) {
   if (!stream || !stream.url) return false;
   
   // Reject placeholder URLs (they must be decrypted/resolved first)
   if (stream.url.startsWith('placeholder_')) return false;
+
+  // Trust-bypass known CDN patterns (pre-validated by upstream API, often block HEAD)
+  if (TRUSTED_BYPASS_PATTERNS.some(p => stream.url.includes(p))) return true;
 
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
