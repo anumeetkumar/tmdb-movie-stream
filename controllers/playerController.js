@@ -29,8 +29,8 @@ async function playStream(req, res) {
     }
   } catch (e) { /* Ignore metadata errors */ }
 
-  // 2. Build the resolve API URL the client will call
-  let resolveUrl = `/api/resolve/${normalizedType}/${id}`;
+  // 2. Build the resolve-all URL — client calls this to get ALL providers (Vidzee, DahmerMovies, Nxsha, etc.)
+  let resolveUrl = `/api/resolve-all/${normalizedType}/${id}`;
   const params = [];
   if (season !== null) params.push(`season=${season}`);
   if (episode !== null) params.push(`episode=${episode}`);

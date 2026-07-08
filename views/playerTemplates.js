@@ -165,7 +165,7 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, poste
             <div id="loading-overlay">
                 <div class="load-spinner"></div>
                 <div class="load-text" id="load-text">Fetching streams...</div>
-                <div class="load-subtext">Scraping providers in parallel</div>
+                <div class="load-subtext">Collecting all providers in parallel</div>
             </div>
         </div>
         <div class="footer">
