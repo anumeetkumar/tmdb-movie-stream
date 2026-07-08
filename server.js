@@ -21,9 +21,13 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, service: 'fast-stream-resolver', time: new Date().toISOString() });
 });
 
+// Serve static playground assets from public directory
+app.use(express.static('public'));
+
 // Register MVC Routers
 app.use('/api', apiRoutes);
 app.use('/play', playerRoutes);
+app.use('/embed', playerRoutes);
 
 const PORT = process.env.PORT || 8788;
 app.listen(PORT, '0.0.0.0', () => {

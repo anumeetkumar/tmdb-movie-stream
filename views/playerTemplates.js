@@ -1,21 +1,42 @@
 /**
  * Views Layer - Dynamic Player with client-side stream validation and dual-phase loading.
- * Loads fast stream (Vidzee Hindi) instantly, then loads all other streams in background.
+ * Fully optimized for standard view and fullscreen iframe embedding.
  */
 
-function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, posterUrl) {
+function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, posterUrl, isEmbed = false) {
   const safeTitle = (mediaTitle || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const safeSub = (mediaSubtitle || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const safeResolveUrl = (resolveUrl || '').replace(/'/g, "\\'");
   const safeFastStreamUrl = (fastStreamUrl || '').replace(/'/g, "\\'");
   const safePoster = (posterUrl || '').replace(/'/g, "\\'");
+  
+  const bodyClass = isEmbed ? 'embed-mode' : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Playing: ${mediaTitle}</title>
+    <title>Stream ${mediaTitle} | TMDB Embed Player</title>
+    
+    <!-- SEO Optimization Meta Tags -->
+    <meta name="description" content="Watch ${mediaTitle} for free on TMDB Embed Player. Direct HLS streams, multiple providers, clean playback, and responsive controls.">
+    <meta name="keywords" content="TMDB Player, TMDB Embed, ${mediaTitle}, watch movie, stream tv show, embed player, ad-free streaming">
+    <meta name="robots" content="index, follow">
+    
+    <!-- OpenGraph / Facebook Previews -->
+    <meta property="og:type" content="video.movie">
+    <meta property="og:title" content="Stream ${mediaTitle} on TMDB Embed Player">
+    <meta property="og:description" content="Instant high-performance streaming. No pop-ups, clean interface.">
+    <meta property="og:image" content="${posterUrl || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1'}">
+    <meta property="og:site_name" content="TMDB Player">
+    
+    <!-- Twitter Previews -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Stream ${mediaTitle} on TMDB Embed Player">
+    <meta name="twitter:description" content="Watch ${mediaTitle} in HD with zero pop-ups.">
+    <meta name="twitter:image" content="${posterUrl || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1'}">
+
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/artplayer/dist/artplayer.js"></script>
@@ -62,7 +83,9 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, 
             color: #fff; padding: 8px 16px; border-radius: 12px;
             font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 600;
             outline: none; cursor: pointer; max-width: 320px;
+            transition: all 0.2s ease;
         }
+        .source-select:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
         .source-select option { background: #0f172a; color: #fff; }
         .player-wrapper {
             position: relative; width: 100%; aspect-ratio: 16/9;
@@ -109,16 +132,68 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, 
         .btn-secondary:hover { background: rgba(255,255,255,0.1); color: #fff; }
         .controls-info { display: flex; gap: 15px; flex-wrap: wrap; }
         #stream-status { font-size: 12px; color: #00f2fe; }
+
+        /* ─── Premium Embed Mode Styles ────────────────────────────────────────── */
+        body.embed-mode {
+            background: #000;
+            padding: 0; margin: 0;
+            overflow: hidden;
+            width: 100vw; height: 100vh;
+        }
+        body.embed-mode .container {
+            width: 100vw; height: 100vh;
+            max-width: none; padding: 0;
+            border: none; border-radius: 0;
+            box-shadow: none; display: block;
+            position: relative;
+        }
+        body.embed-mode .header, body.embed-mode .footer {
+            display: none;
+        }
+        body.embed-mode .player-wrapper {
+            width: 100vw; height: 100vh;
+            aspect-ratio: auto; border: none;
+            border-radius: 0;
+        }
+        body.embed-mode #loading-overlay {
+            border-radius: 0;
+        }
+        body.embed-mode .source-select-area {
+            position: absolute;
+            top: 16px; right: 16px;
+            z-index: 100;
+            background: rgba(8, 12, 20, 0.7);
+            backdrop-filter: blur(12px);
+            padding: 6px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            opacity: 1;
+            transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events: auto;
+        }
+        body.embed-mode .source-select-area.fade-out {
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-8px);
+        }
+        body.embed-mode .source-label {
+            color: #fff;
+        }
+        body.embed-mode .source-select {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(255,255,255,0.15);
+            font-size: 12px; padding: 6px 12px;
+        }
     </style>
 </head>
-<body>
+<body class="${bodyClass}">
     <div class="container">
         <div class="header">
             <div class="title-area">
                 <h1>${mediaTitle}</h1>
                 <p>${mediaSubtitle}</p>
             </div>
-            <div class="source-select-area">
+            <div class="source-select-area" id="select-wrapper">
                 <span class="source-label">Source:</span>
                 <select id="source-select" class="source-select" disabled>
                     <option>Locating fast stream...</option>
@@ -127,6 +202,7 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, 
         </div>
         <div class="player-wrapper">
             <div id="player"></div>
+            <!-- If we're inside embed mode, mount the selection dropdown overlay here instead -->
             <div id="loading-overlay">
                 <div class="load-spinner"></div>
                 <div class="load-text" id="load-text">Connecting to fast stream...</div>
@@ -149,11 +225,13 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, 
         var RESOLVE_URL     = '${safeResolveUrl}';
         var FAST_STREAM_URL = '${safeFastStreamUrl}';
         var POSTER          = '${safePoster}';
+        var IS_EMBED        = ${isEmbed};
 
         var overlay  = document.getElementById('loading-overlay');
         var loadText = document.getElementById('load-text');
         var select   = document.getElementById('source-select');
         var statusEl = document.getElementById('stream-status');
+        var wrapper  = document.getElementById('select-wrapper');
 
         var art              = null;
         var streams          = [];
@@ -162,6 +240,38 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, 
         var failedSet        = new Set(); // indices of confirmed-dead streams
         var fastStreamLoaded = false;
         var fullStreamsLoaded = false;
+
+        // Move source dropdown into the video wrapper when in Embed Mode
+        if (IS_EMBED) {
+            document.querySelector('.player-wrapper').appendChild(wrapper);
+            setupEmbedOverlayControls();
+        }
+
+        // ─── Embed Mode UI Overlay Auto-Hide Logic ──────────────────────────────
+        function setupEmbedOverlayControls() {
+            var hideTimer = null;
+            function showControls() {
+                wrapper.classList.remove('fade-out');
+                clearTimeout(hideTimer);
+                hideTimer = setTimeout(function() {
+                    // Only hide if video is playing
+                    if (art && art.playing) {
+                        wrapper.classList.add('fade-out');
+                    }
+                }, 3000);
+            }
+
+            document.addEventListener('mousemove', showControls);
+            document.addEventListener('touchstart', showControls);
+            showControls();
+
+            // Hook into player playing state
+            setInterval(function() {
+                if (art && !art.playing) {
+                    wrapper.classList.remove('fade-out');
+                }
+            }, 1000);
+        }
 
         // ─── Helpers ────────────────────────────────────────────────────────────
         function isHls(url) {
@@ -189,13 +299,6 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, 
             statusEl.textContent = alive + '/' + streams.length + ' stream(s) alive';
         }
 
-        function markAlive(idx) {
-            var opt = select.options[idx];
-            if (opt && !failedSet.has(idx)) {
-                opt.style.color = '#00e676';
-            }
-        }
-
         // ─── Background preflight ────────────────────────────────────────────────
         async function preflightCheck(url, idx) {
             if (!isProxy(url)) return; 
@@ -209,7 +312,6 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, 
                 if (ct.indexOf('application/json') !== -1 || ct.indexOf('text/html') !== -1) {
                     markFailed(idx); return;
                 }
-                markAlive(idx);
             } catch (e) {
                 markFailed(idx);
             }

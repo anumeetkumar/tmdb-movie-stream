@@ -267,5 +267,30 @@ module.exports = {
   resolveFast,
   resolveAll,
   resolveFastVidzeeStream,
-  formatStreamsHelper
+  formatStreamsHelper,
+  getMetadata
 };
+
+// Route 4: Fetch metadata from TMDB (used by embed playground to resolve title/backdrop)
+async function getMetadata(req, res) {
+  const { type, id } = req.params;
+  const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
+  const axios = require('axios');
+  try {
+    const keys = config.tmdbApiKeys && config.tmdbApiKeys.length ? config.tmdbApiKeys : [config.tmdbApiKey];
+    const activeKey = keys[Math.floor(Math.random() * keys.length)];
+    if (!activeKey) {
+      return res.json({ success: false, title: `${type.toUpperCase()} - ${id}` });
+    }
+    const { data } = await axios.get(`https://api.themoviedb.org/3/${normalizedType}/${id}?api_key=${activeKey}`, { timeout: 4000 });
+    res.json({
+      success: true,
+      title: data.title || data.name || '',
+      tagline: data.tagline || '',
+      overview: data.overview || '',
+      backdrop: data.backdrop_path ? `https://image.tmdb.org/t/p/w1280${data.backdrop_path}` : ''
+    });
+  } catch (e) {
+    res.json({ success: false, title: `${type.toUpperCase()} - ${id}` });
+  }
+}

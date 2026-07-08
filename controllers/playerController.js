@@ -49,8 +49,9 @@ async function playStream(req, res) {
   }
 
   // 3. Render page immediately — client JS will fetch & load streams
+  const isEmbed = req.query.embed === 'true' || req.originalUrl.startsWith('/embed');
   const { renderPlayerPage } = require('../views/playerTemplates');
-  res.send(renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, posterUrl));
+  res.send(renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, posterUrl, isEmbed));
 }
 
 module.exports = { playStream };
