@@ -9,6 +9,7 @@ const apiRoutes = require('./routes/apiRoutes');
 const playerRoutes = require('./routes/playerRoutes');
 
 const app = express();
+app.set('trust proxy', 1); // Trust Vercel/reverse-proxy x-forwarded-proto so req.protocol === 'https'
 app.use(cors());
 app.use(express.json());
 

@@ -13,7 +13,9 @@ const { processStreamsForProxy } = require('../proxy/proxyServer');
 const formatStreamsHelper = (streamsList, req) => {
   const useProxy = config.enableProxy || req.query.proxy !== 'false';
   if (useProxy && Array.isArray(streamsList)) {
-    const serverUrl = `${req.protocol}://${req.get('host')}`;
+    // x-forwarded-proto is set by Vercel/nginx; trust proxy must be enabled (set in server.js)
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    const serverUrl = `${protocol}://${req.get('host')}`;
     let processed = processStreamsForProxy(streamsList, serverUrl);
     return processed.map(s => {
       if (s && typeof s === 'object') {
@@ -25,6 +27,7 @@ const formatStreamsHelper = (streamsList, req) => {
   }
   return streamsList;
 };
+
 
 // Route 1: Fast racer resolver endpoint (returns first finished provider in ms)
 async function resolveFast(req, res) {
