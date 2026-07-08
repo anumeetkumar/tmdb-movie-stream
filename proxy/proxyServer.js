@@ -76,12 +76,12 @@ async function prefetchSegment(url, headers) {
 const DEFAULT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 function inferContentType(upstreamCT, targetUrl) {
-    const bad = !upstreamCT || /application\/octet-stream/i.test(upstreamCT) || /application\/(x-)?zip/i.test(upstreamCT);
+    const bad = !upstreamCT || /application\/octet-stream/i.test(upstreamCT) || /application\/(x-)?zip/i.test(upstreamCT) || /image\/jpeg/i.test(upstreamCT);
     if (!bad) return upstreamCT;
     if (/\.mkv(\?|$)/i.test(targetUrl)) return 'video/x-matroska';
     if (/\.mp4(\?|$)/i.test(targetUrl)) return 'video/mp4';
     if (/\.m3u8(\?|$)/i.test(targetUrl)) return 'application/vnd.apple.mpegurl';
-    if (/\.ts(\?|$)/i.test(targetUrl)) return 'video/mp2t';
+    if (/\.(ts|jpg|jpeg)(\?|$)/i.test(targetUrl)) return 'video/mp2t';
     return 'application/octet-stream';
 }
 
@@ -115,36 +115,76 @@ function extractOriginalUrl(proxyUrl) {
 function rewriteM3u8(content, targetUrl, baseProxyUrl, headers) {
     const lines = content.split('\n');
     const out = []; const segmentUrls = [];
+    let isSubPlaylist = false;
+    let isSegment = false;
+
     for (const line of lines) {
-        if (line.startsWith('#')) {
-            if (line.startsWith('#EXT-X-KEY:')) {
-                const regex = /https?:\/\/[^""\s]+/g; const keyUrl = regex.exec(line)?.[0];
+        const trimmed = line.trim();
+        if (!trimmed) {
+            out.push(line);
+            continue;
+        }
+
+        if (trimmed.startsWith('#')) {
+            // Track state for the next line
+            if (trimmed.includes('#EXT-X-STREAM-INF')) {
+                isSubPlaylist = true;
+            } else if (trimmed.includes('#EXTINF')) {
+                isSegment = true;
+            }
+
+            if (trimmed.startsWith('#EXT-X-KEY:')) {
+                const regex = /URI="([^"]+)"/;
+                const match = trimmed.match(regex);
+                const keyUrl = match ? match[1] : null;
                 if (keyUrl) {
-                    const proxyUrl = `${baseProxyUrl}/ts-proxy?url=${encodeURIComponent(keyUrl)}&headers=${encodeURIComponent(JSON.stringify(headers))}`;
-                    out.push(line.replace(keyUrl, proxyUrl));
-                    if (!isCacheDisabled()) prefetchSegment(keyUrl, headers);
+                    try {
+                        const absKeyUrl = new URL(keyUrl, targetUrl).href;
+                        const proxyUrl = `${baseProxyUrl}/ts-proxy?url=${encodeURIComponent(absKeyUrl)}&headers=${encodeURIComponent(JSON.stringify(headers))}`;
+                        out.push(trimmed.replace(keyUrl, proxyUrl));
+                        if (!isCacheDisabled()) prefetchSegment(absKeyUrl, headers);
+                    } catch {
+                        out.push(line);
+                    }
                 } else out.push(line);
-            } else if (line.startsWith('#EXT-X-MEDIA:') || line.startsWith('#EXT-X-I-FRAME-STREAM-INF:')) {
-                const uriMatch = line.match(/URI="([^"]+)"/);
+            } else if (trimmed.startsWith('#EXT-X-MEDIA:') || trimmed.startsWith('#EXT-X-I-FRAME-STREAM-INF:')) {
+                const uriMatch = trimmed.match(/URI="([^"]+)"/);
                 if (uriMatch) {
                     try {
                         const mediaUrl = new URL(uriMatch[1], targetUrl).href;
                         const proxyUrl = `${baseProxyUrl}/m3u8-proxy?url=${encodeURIComponent(mediaUrl)}&headers=${encodeURIComponent(JSON.stringify(headers))}`;
-                        out.push(line.replace(uriMatch[1], proxyUrl));
+                        out.push(trimmed.replace(uriMatch[1], proxyUrl));
                     } catch { out.push(line); }
                 } else out.push(line);
-            } else out.push(line);
-        } else if (line.trim()) {
+            } else {
+                out.push(line);
+            }
+        } else {
             try {
-                const abs = new URL(line, targetUrl).href;
-                if (/\.m3u8(\?|$)/i.test(abs)) {
+                const abs = new URL(trimmed, targetUrl).href;
+                if (isSubPlaylist) {
                     out.push(`${baseProxyUrl}/m3u8-proxy?url=${encodeURIComponent(abs)}&headers=${encodeURIComponent(JSON.stringify(headers))}`);
-                } else if (/\.ts(\?|$)/i.test(abs)) {
+                } else if (isSegment) {
                     segmentUrls.push(abs);
                     out.push(`${baseProxyUrl}/ts-proxy?url=${encodeURIComponent(abs)}&headers=${encodeURIComponent(JSON.stringify(headers))}`);
-                } else out.push(line);
-            } catch { out.push(line); }
-        } else out.push(line);
+                } else {
+                    // Fallback to extensions if state was not set
+                    if (/\.m3u8(\?|$)/i.test(abs)) {
+                        out.push(`${baseProxyUrl}/m3u8-proxy?url=${encodeURIComponent(abs)}&headers=${encodeURIComponent(JSON.stringify(headers))}`);
+                    } else if (/\.(ts|mp4|mkv)(\?|$)/i.test(abs)) {
+                        segmentUrls.push(abs);
+                        out.push(`${baseProxyUrl}/ts-proxy?url=${encodeURIComponent(abs)}&headers=${encodeURIComponent(JSON.stringify(headers))}`);
+                    } else {
+                        out.push(line);
+                    }
+                }
+            } catch {
+                out.push(line);
+            }
+            // Reset state
+            isSubPlaylist = false;
+            isSegment = false;
+        }
     }
     if (segmentUrls.length && !isCacheDisabled()) {
         Promise.all(segmentUrls.map(u => prefetchSegment(u, headers))).catch(() => undefined);
