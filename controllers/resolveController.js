@@ -7,7 +7,6 @@ const { listProviders, getProvider } = require('../providers/registry');
 const { resolveImdbId } = require('../utils/tmdb');
 const { applyFilters } = require('../utils/streamFilters');
 const cache = require('../utils/cache');
-const { filterValidStreams } = require('../utils/validator');
 const { processStreamsForProxy } = require('../proxy/proxyServer');
 
 // Helper to format and wrap stream URLs through local proxy if enabled
@@ -86,11 +85,9 @@ async function resolveFast(req, res) {
 
         if (Array.isArray(streams) && streams.length > 0) {
           let filtered = applyFilters(streams, name, config.minQualities, config.excludeCodecs);
-          const validated = await filterValidStreams(filtered);
-          
-          if (validated.length > 0) {
-            allProviderStreams.push(...validated);
-            sendFastestResponse(name, validated, duration);
+          if (filtered.length > 0) {
+            allProviderStreams.push(...filtered);
+            sendFastestResponse(name, filtered, duration);
           }
         }
       } catch (err) {
@@ -162,9 +159,8 @@ async function resolveAll(req, res) {
         const streams = await prov.fetch({ tmdbId, type: providerType, season, episode, imdbId, sr: req.query.sr || null, filters: {} });
         if (Array.isArray(streams) && streams.length > 0) {
           let filtered = applyFilters(streams, name, config.minQualities, config.excludeCodecs);
-          const validated = await filterValidStreams(filtered);
-          if (validated.length > 0) {
-            allProviderStreams.push(...validated);
+          if (filtered.length > 0) {
+            allProviderStreams.push(...filtered);
           }
         }
       } catch (err) {
