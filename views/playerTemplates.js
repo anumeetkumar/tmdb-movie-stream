@@ -1,12 +1,13 @@
 /**
- * Views Layer - Dynamic Player with client-side stream validation
- * Page renders instantly. Streams load async. Dead streams auto-disabled in dropdown.
+ * Views Layer - Dynamic Player with client-side stream validation and dual-phase loading.
+ * Loads fast stream (Vidzee Hindi) instantly, then loads all other streams in background.
  */
 
-function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, posterUrl) {
+function renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, posterUrl) {
   const safeTitle = (mediaTitle || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const safeSub = (mediaSubtitle || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const safeResolveUrl = (resolveUrl || '').replace(/'/g, "\\'");
+  const safeFastStreamUrl = (fastStreamUrl || '').replace(/'/g, "\\'");
   const safePoster = (posterUrl || '').replace(/'/g, "\\'");
 
   return `<!DOCTYPE html>
@@ -120,7 +121,7 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, poste
             <div class="source-select-area">
                 <span class="source-label">Source:</span>
                 <select id="source-select" class="source-select" disabled>
-                    <option>Loading streams...</option>
+                    <option>Locating fast stream...</option>
                 </select>
             </div>
         </div>
@@ -128,8 +129,8 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, poste
             <div id="player"></div>
             <div id="loading-overlay">
                 <div class="load-spinner"></div>
-                <div class="load-text" id="load-text">Fetching all sources...</div>
-                <div class="load-subtext">Collecting all providers in parallel</div>
+                <div class="load-text" id="load-text">Connecting to fast stream...</div>
+                <div class="load-subtext">Initializing Vidzee Hindi (unproxied)</div>
             </div>
         </div>
         <div class="footer">
@@ -145,19 +146,22 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, poste
         </div>
     </div>
     <script>
-        var RESOLVE_URL = '${safeResolveUrl}';
-        var POSTER      = '${safePoster}';
+        var RESOLVE_URL     = '${safeResolveUrl}';
+        var FAST_STREAM_URL = '${safeFastStreamUrl}';
+        var POSTER          = '${safePoster}';
 
         var overlay  = document.getElementById('loading-overlay');
         var loadText = document.getElementById('load-text');
         var select   = document.getElementById('source-select');
         var statusEl = document.getElementById('stream-status');
 
-        var art        = null;
-        var streams    = [];
-        var errorTimer = null;
-        var currentIdx = 0;
-        var failedSet  = new Set(); // indices of confirmed-dead streams
+        var art              = null;
+        var streams          = [];
+        var errorTimer       = null;
+        var currentIdx       = 0;
+        var failedSet        = new Set(); // indices of confirmed-dead streams
+        var fastStreamLoaded = false;
+        var fullStreamsLoaded = false;
 
         // ─── Helpers ────────────────────────────────────────────────────────────
         function isHls(url) {
@@ -193,9 +197,8 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, poste
         }
 
         // ─── Background preflight ────────────────────────────────────────────────
-        // Fetches proxy URL and checks the response is actually a media stream
         async function preflightCheck(url, idx) {
-            if (!isProxy(url)) return; // direct CDN links — skip
+            if (!isProxy(url)) return; 
             try {
                 var ctrl = new AbortController();
                 var tid  = setTimeout(function() { ctrl.abort(); }, 8000);
@@ -203,13 +206,12 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, poste
                 clearTimeout(tid);
                 if (!res.ok) { markFailed(idx); return; }
                 var ct = (res.headers.get('content-type') || '').toLowerCase();
-                // Error: proxy returned JSON or HTML instead of a media stream
                 if (ct.indexOf('application/json') !== -1 || ct.indexOf('text/html') !== -1) {
                     markFailed(idx); return;
                 }
                 markAlive(idx);
             } catch (e) {
-                markFailed(idx); // abort / network error
+                markFailed(idx);
             }
         }
 
@@ -250,7 +252,6 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, poste
                 moreVideoAttr: { crossOrigin: 'anonymous' }
             });
 
-            // On error: mark dead, auto-advance to next alive stream
             art.on('error', function() {
                 if (errorTimer) return;
                 markFailed(currentIdx);
@@ -303,29 +304,90 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, poste
             playStream(stream);
         });
 
-        // ─── Main ────────────────────────────────────────────────────────────────
-        async function loadStreams() {
-            loadText.textContent = 'Fetching all sources...';
+        // ─── Phase 1: Fast Stream Load (Vidzee Hindi) ──────────────────────────
+        async function loadFastStream() {
+            try {
+                var res = await fetch(FAST_STREAM_URL, { cache: 'no-store' });
+                if (!res.ok) throw new Error('Fast API error');
+                var data = await res.json();
+                
+                if (data && data.success && data.url) {
+                    fastStreamLoaded = true;
+                    // If full streams haven't loaded yet, start playing fast stream immediately
+                    if (!fullStreamsLoaded) {
+                        var fastStream = {
+                            name: data.server || 'Hindi (sr=7)',
+                            title: data.server || 'Hindi (sr=7)',
+                            url: data.url,
+                            quality: 'Auto',
+                            provider: 'Vidzee',
+                            subtitles: data.subtitles || []
+                        };
+                        streams = [fastStream];
+                        currentIdx = 0;
+                        populateSelect(streams);
+                        statusEl.textContent = 'Playing fast stream...';
+                        hideOverlay();
+                        initPlayer(fastStream);
+                    }
+                }
+            } catch (e) {
+                console.warn('[Player] Fast stream load failed:', e);
+            }
+        }
+
+        // ─── Phase 2: Full Streams Load (Background) ─────────────────────────────
+        async function loadFullStreams() {
             try {
                 var res  = await fetch(RESOLVE_URL, { cache: 'no-store' });
-                if (!res.ok) throw new Error('API ' + res.status);
+                if (!res.ok) throw new Error('Full API ' + res.status);
                 var data = await res.json();
                 var fetched = (data.streams || []).filter(function(s) {
                     return s && typeof s.url === 'string' && s.url.length > 4;
                 });
 
                 if (fetched.length === 0) {
-                    loadText.textContent = 'No streams found. Retrying...';
-                    setTimeout(loadStreams, 4000);
+                    if (!fastStreamLoaded) {
+                        loadText.textContent = 'No streams found. Retrying in 4s...';
+                        setTimeout(loadFullStreams, 4000);
+                    }
                     return;
                 }
 
-                streams    = fetched;
-                currentIdx = 0;
+                fullStreamsLoaded = true;
+
+                // Merge streams: we want to keep the currently playing/resolved streams intact,
+                // but populate the select with the full list.
+                var oldPlayingUrl = (streams[currentIdx] || {}).url;
+                streams = fetched;
+
+                // Update select dropdown with all resolved streams
                 populateSelect(streams);
                 statusEl.textContent = streams.length + ' stream(s) available';
-                hideOverlay();
-                initPlayer(streams[0]);
+
+                // Find index of the currently playing stream in the new list to keep selection aligned
+                var foundMatchIdx = -1;
+                if (oldPlayingUrl) {
+                    for (var i = 0; i < streams.length; i++) {
+                        if (streams[i].url === oldPlayingUrl) {
+                            foundMatchIdx = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (foundMatchIdx !== -1) {
+                    currentIdx = foundMatchIdx;
+                    select.value = String(currentIdx);
+                } else {
+                    // If we weren't playing anything yet (fast stream failed/slow), start playing the first one
+                    if (!art) {
+                        currentIdx = 0;
+                        select.value = '0';
+                        hideOverlay();
+                        initPlayer(streams[0]);
+                    }
+                }
 
                 // Background: preflight check all proxy URLs concurrently
                 streams.forEach(function(s, i) {
@@ -333,13 +395,17 @@ function renderPlayerPage(mediaTitle, mediaSubtitle, _streams, resolveUrl, poste
                 });
 
             } catch (err) {
-                console.error('[Player] loadStreams error:', err);
-                loadText.textContent = 'Error loading. Retrying...';
-                setTimeout(loadStreams, 4000);
+                console.error('[Player] loadFullStreams error:', err);
+                if (!fastStreamLoaded && !fullStreamsLoaded) {
+                    loadText.textContent = 'Error loading. Retrying...';
+                    setTimeout(loadFullStreams, 4000);
+                }
             }
         }
 
-        loadStreams();
+        // Kick off both phases concurrently
+        loadFastStream();
+        loadFullStreams();
     </script>
 </body>
 </html>`;

@@ -29,16 +29,21 @@ async function playStream(req, res) {
     }
   } catch (e) { /* Ignore metadata errors */ }
 
-  // 2. Build the resolve-all URL — client calls this to get ALL providers (Vidzee, DahmerMovies, Nxsha, etc.)
+  // 2. Build the resolve URLs — client calls fastStreamUrl first for instant play, then resolveUrl for the dropdown
   let resolveUrl = `/api/resolve-all/${normalizedType}/${id}`;
+  let fastStreamUrl = `/api/stream-fast/${normalizedType}/${id}`;
   const params = [];
   if (season !== null) params.push(`season=${season}`);
   if (episode !== null) params.push(`episode=${episode}`);
-  if (params.length) resolveUrl += `?${params.join('&')}`;
+  if (params.length) {
+    const queryString = params.join('&');
+    resolveUrl += `?${queryString}`;
+    fastStreamUrl += `?${queryString}`;
+  }
 
   // 3. Render page immediately — client JS will fetch & load streams
   const { renderPlayerPage } = require('../views/playerTemplates');
-  res.send(renderPlayerPage(mediaTitle, mediaSubtitle, [], resolveUrl, posterUrl));
+  res.send(renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, posterUrl));
 }
 
 module.exports = { playStream };
