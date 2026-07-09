@@ -504,6 +504,10 @@ async function isStreamAlive(stream) {
 
 async function verifyStreamsInParallel(streams) {
   if (!Array.isArray(streams) || streams.length === 0) return [];
+  if (!config.enableBackendPreflight) {
+    console.log(`[Preflight-BE] Backend preflight checks disabled (enableBackendPreflight = false). Skipping stream validation.`);
+    return streams;
+  }
   console.log(`[Preflight-BE] Verifying ${streams.length} stream(s) on backend...`);
   const t0 = Date.now();
   

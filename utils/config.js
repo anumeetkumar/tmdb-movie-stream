@@ -111,6 +111,7 @@ function normalizeConfig(base) {
   if (cfg.disableCache === undefined) cfg.disableCache = false;
   if (cfg.enablePStreamApi === undefined) cfg.enablePStreamApi = true;
   if (cfg.enableProxy === undefined) cfg.enableProxy = false; // default off
+  if (cfg.enableBackendPreflight === undefined) cfg.enableBackendPreflight = !process.env.VERCEL;
   // Proxy features removed; always use direct connections
   if (cfg.disableUrlValidation === undefined) cfg.disableUrlValidation = false;
   if (cfg.disable4khdhubUrlValidation === undefined) cfg.disable4khdhubUrlValidation = false;
