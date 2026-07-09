@@ -873,7 +873,7 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
         var IS_EMBED        = ${isEmbed};
 
         var overlay  = document.getElementById('loading-overlay');
-        var loadText = document.getElementById('load-text');
+        var loadText = document.getElementById('overlay-status');
         var select   = document.getElementById('source-select');
         var statusEl = document.getElementById('stream-status');
         var wrapper  = document.getElementById('select-wrapper');
@@ -1160,7 +1160,7 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
                         card.className = 'server-card';
                         card.id = 'card-' + idx;
                         
-                        var cleanName = (s.title || s.name || 'Server').split('|')[0].trim();
+                        var cleanName = String(s.title || s.name || 'Server').split('|')[0].trim();
                         card.innerHTML = '<svg class="check-icon" viewBox="0 0 24 24">' +
                                          '<path d="M20 6L9 17l-5-5" stroke="#2ecc71" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>' +
                                          '</svg>' +

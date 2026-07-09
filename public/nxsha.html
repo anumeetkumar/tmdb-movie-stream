@@ -352,7 +352,7 @@
         const mediaTitleEl = document.getElementById('media-title');
         const mediaSubtitleEl = document.getElementById('media-subtitle');
         const overlay = document.getElementById('loading-overlay');
-        const loadText = document.getElementById('load-text');
+        const loadText = document.getElementById('overlay-status');
         const select = document.getElementById('source-select');
         const statusEl = document.getElementById('stream-status');
         const wrapper = document.getElementById('select-wrapper');
@@ -644,7 +644,7 @@
                         card.className = 'server-card';
                         card.id = `card-${idx}`;
                         
-                        const cleanName = (s.title || s.name || 'Server').split('|')[0].trim();
+                        const cleanName = String(s.title || s.name || 'Server').split('|')[0].trim();
                         card.innerHTML = `
                             <svg class="check-icon" viewBox="0 0 24 24">
                                 <path d="M20 6L9 17l-5-5" stroke="#2ecc71" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
