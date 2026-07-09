@@ -10,7 +10,8 @@ const appState = {
   tmdbId: '273240',
   season: '1',
   episode: '1',
-  showName: 'The Deal'
+  showName: 'The Deal',
+  engine: 'nxsha'
 };
 
 // Mock Show Names Dictionary for TMDB coordinates
@@ -24,6 +25,7 @@ const SHOW_NAMES = {
 // DOM Elements
 const tabTv = document.getElementById('tabTv');
 const tabMovie = document.getElementById('tabMovie');
+const playerEngineSelect = document.getElementById('playerEngineSelect');
 const inputsRow = document.getElementById('inputsRow');
 const idLabel = document.getElementById('idLabel');
 const tmdbIdInput = document.getElementById('tmdbIdInput');
@@ -58,6 +60,7 @@ function parseUrlParams() {
   if (urlParams.has('e')) appState.episode = urlParams.get('e');
   if (urlParams.has('episode')) appState.episode = urlParams.get('episode');
   if (urlParams.has('server')) appState.server = urlParams.get('server');
+  if (urlParams.has('engine')) appState.engine = urlParams.get('engine');
 }
 
 // Initialize portal scripts
@@ -101,14 +104,22 @@ function setMediaType(type) {
   updateSnippetCode();
 }
 
+function getRoutePrefix(engine) {
+  if (engine === 'nxsha') return '/nxsha/embed';
+  if (engine === 'stremfx') return '/stremfx/embed';
+  return '/embed';
+}
+
 // Generate Embed Syntax Snippet
 function updateSnippetCode() {
   appState.tmdbId = tmdbIdInput.value.trim() || '273240';
   appState.season = seasonInput.value || '1';
   appState.episode = episodeInput.value || '1';
+  appState.engine = playerEngineSelect.value;
 
   const currentOrigin = window.location.origin;
-  let embedUrl = `${currentOrigin}/embed/${appState.type}/${appState.tmdbId}`;
+  const routePrefix = getRoutePrefix(appState.engine);
+  let embedUrl = `${currentOrigin}${routePrefix}/${appState.type}/${appState.tmdbId}`;
   if (appState.type === 'tv') {
     embedUrl += `/${appState.season}/${appState.episode}`;
   }
@@ -133,6 +144,7 @@ function updateGeneratorUI() {
   tmdbIdInput.value = appState.tmdbId;
   seasonInput.value = appState.season;
   episodeInput.value = appState.episode;
+  playerEngineSelect.value = appState.engine;
   setMediaType(appState.type);
 }
 
@@ -170,7 +182,8 @@ async function launchStream() {
   streamCoordinatesText.innerText = coordinates;
 
   // Build direct embed player URL
-  let playerUrl = `/embed/${appState.type}/${appState.tmdbId}`;
+  const routePrefix = getRoutePrefix(appState.engine);
+  let playerUrl = `${routePrefix}/${appState.type}/${appState.tmdbId}`;
   if (appState.type === 'tv') {
     playerUrl += `/${appState.season}/${appState.episode}`;
   }
@@ -185,7 +198,8 @@ async function launchStream() {
 function copySnippet() {
   // Extract plain text string
   const currentOrigin = window.location.origin;
-  let embedUrl = `${currentOrigin}/embed/${appState.type}/${appState.tmdbId}`;
+  const routePrefix = getRoutePrefix(appState.engine);
+  let embedUrl = `${currentOrigin}${routePrefix}/${appState.type}/${appState.tmdbId}`;
   if (appState.type === 'tv') {
     embedUrl += `/${appState.season}/${appState.episode}`;
   }
@@ -251,6 +265,10 @@ function setupEventListeners() {
   tmdbIdInput.addEventListener('input', updateSnippetCode);
   seasonInput.addEventListener('input', updateSnippetCode);
   episodeInput.addEventListener('input', updateSnippetCode);
+  playerEngineSelect.addEventListener('change', () => {
+    appState.engine = playerEngineSelect.value;
+    updateSnippetCode();
+  });
 
   // Buttons triggers
   launchStreamBtn.addEventListener('click', launchStream);

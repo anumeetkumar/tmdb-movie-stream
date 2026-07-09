@@ -17,6 +17,7 @@ const providerFunctionMap = {
   'dahmermovies.js': 'getDahmermoviesStreams',
   'vidzee.js': 'getVidzeeStreams',
   'nxsha.js': 'getNxshaStreams',
+  'stremfx.js': 'getStremFxStreams',
 };
 
 // Stats for debug endpoint

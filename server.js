@@ -36,6 +36,13 @@ app.use('/api', apiRoutes);
 app.use('/play', playerRoutes);
 app.use('/embed', playerRoutes);
 
+// Register dedicated top-level Nxsha & StremFx Player Routes
+const { playStreamNxsha, playStreamStremFx } = require('./controllers/playerController');
+app.get(['/nxsha/:type/:id', '/nxsha/:type/:id/:season/:episode'], playStreamNxsha);
+app.get(['/nxsha/embed/:type/:id', '/nxsha/embed/:type/:id/:season/:episode'], playStreamNxsha);
+app.get(['/stremfx/:type/:id', '/stremfx/:type/:id/:season/:episode'], playStreamStremFx);
+app.get(['/stremfx/embed/:type/:id', '/stremfx/embed/:type/:id/:season/:episode'], playStreamStremFx);
+
 const PORT = process.env.PORT || 8788;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n======================================================`);

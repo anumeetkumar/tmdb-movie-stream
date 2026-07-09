@@ -117,8 +117,9 @@ async function resolveFast(req, res) {
             uniqueStreams.push(s);
           }
         }
-        cache.set(normalizedType, tmdbId, season, episode, uniqueStreams);
-        console.log(`[Resolver] Cache populated for ${normalizedType} ${tmdbId} S:${season} E:${episode} with ${uniqueStreams.length} streams`);
+        const verifiedStreams = await verifyStreamsInParallel(uniqueStreams);
+        cache.set(normalizedType, tmdbId, season, episode, verifiedStreams);
+        console.log(`[Resolver] Cache populated for ${normalizedType} ${tmdbId} S:${season} E:${episode} with ${verifiedStreams.length} verified streams`);
       }
 
       if (!resolved) {
@@ -197,12 +198,14 @@ async function resolveAll(req, res) {
     }
 
     // Warm the TTL Cache (store raw direct URLs)
+    let verifiedStreams = [];
     if (uniqueStreams.length > 0) {
-      cache.set(normalizedType, tmdbId, season, episode, uniqueStreams);
-      console.log(`[Resolver-All] Cache populated for ${normalizedType} ${tmdbId} S:${season} E:${episode} with ${uniqueStreams.length} streams`);
+      verifiedStreams = await verifyStreamsInParallel(uniqueStreams);
+      cache.set(normalizedType, tmdbId, season, episode, verifiedStreams);
+      console.log(`[Resolver-All] Cache populated for ${normalizedType} ${tmdbId} S:${season} E:${episode} with ${verifiedStreams.length} verified streams`);
     }
 
-    const formatted = formatStreamsHelper(uniqueStreams, req);
+    const formatted = formatStreamsHelper(verifiedStreams, req);
     res.json({
       success: true,
       tmdbId,
@@ -263,10 +266,156 @@ async function resolveFastVidzeeStream(req, res) {
   }
 }
 
+// Route 5: Dedicated Nxsha resolver endpoint (returns streams from Nxsha only)
+async function resolveNxsha(req, res) {
+  const { type, id } = req.params;
+  const tmdbId = id;
+  const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
+  const providerType = normalizedType === 'tv' ? 'series' : 'movie';
+
+  const extractNum = (val) => {
+    if (!val) return null;
+    const m = String(val).match(/\d+/);
+    return m ? Number(m[0]) : null;
+  };
+
+  const season = req.query.season ? extractNum(req.query.season) : (req.query.s ? extractNum(req.query.s) : null);
+  const episode = req.query.episode ? extractNum(req.query.episode) : (req.query.e ? extractNum(req.query.e) : null);
+  const forceRefresh = req.query.force === 'true' || req.query.forceRefresh === 'true';
+
+  // Check cache (using distinct cache tmdbId suffix to avoid contamination)
+  if (!forceRefresh) {
+    const cachedStreams = cache.get(normalizedType, `${tmdbId}-nxsha`, season, episode);
+    if (cachedStreams) {
+      console.log(`[Resolver-Nxsha] Cache hit for ${normalizedType} ${tmdbId} S:${season} E:${episode} - returned ${cachedStreams.length} streams`);
+      return res.json({ success: true, fromCache: true, count: cachedStreams.length, streams: cachedStreams });
+    }
+  }
+
+  try {
+    const imdbId = await resolveImdbId(normalizedType, tmdbId);
+    const prov = getProvider('nxsha');
+    if (!prov || !prov.enabled) {
+      return res.status(400).json({ success: false, error: 'NXSHA_DISABLED', message: 'Nxsha provider is disabled' });
+    }
+
+    console.log(`[Resolver-Nxsha] Running provider for tmdbId: ${tmdbId}`);
+    const streams = await prov.fetch({ tmdbId, type: providerType, season, episode, imdbId, sr: req.query.sr || null, filters: {} });
+
+    if (Array.isArray(streams) && streams.length > 0) {
+      let filtered = applyFilters(streams, 'nxsha', config.minQualities, config.excludeCodecs);
+      if (filtered.length > 0) {
+        // Deduplicate
+        const uniqueStreams = [];
+        const seenUrls = new Set();
+        for (const s of filtered) {
+          if (!seenUrls.has(s.url)) {
+            seenUrls.add(s.url);
+            uniqueStreams.push(s);
+          }
+        }
+        const verifiedStreams = await verifyStreamsInParallel(uniqueStreams);
+        cache.set(normalizedType, `${tmdbId}-nxsha`, season, episode, verifiedStreams);
+        console.log(`[Resolver-Nxsha] Resolved, verified & cached ${verifiedStreams.length} stream(s) for ${tmdbId}`);
+        return res.json({
+          success: true,
+          tmdbId,
+          imdbId,
+          fromCache: false,
+          count: verifiedStreams.length,
+          streams: verifiedStreams
+        });
+      }
+    }
+    
+    return res.json({ success: true, fromCache: false, count: 0, streams: [] });
+
+  } catch (err) {
+    console.error('[Resolver-Nxsha] Error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: 'NXSHA_RESOLVE_ERROR', message: err.message });
+    }
+  }
+}
+
+// Route 6: Dedicated StremFx resolver endpoint (returns streams from StremFx only)
+async function resolveStremFx(req, res) {
+  const { type, id } = req.params;
+  const tmdbId = id;
+  const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
+  const providerType = normalizedType === 'tv' ? 'series' : 'movie';
+
+  const extractNum = (val) => {
+    if (!val) return null;
+    const m = String(val).match(/\d+/);
+    return m ? Number(m[0]) : null;
+  };
+
+  const season = req.query.season ? extractNum(req.query.season) : (req.query.s ? extractNum(req.query.s) : null);
+  const episode = req.query.episode ? extractNum(req.query.episode) : (req.query.e ? extractNum(req.query.e) : null);
+  const forceRefresh = req.query.force === 'true' || req.query.forceRefresh === 'true';
+
+  // Check cache (using distinct cache tmdbId suffix to avoid contamination)
+  if (!forceRefresh) {
+    const cachedStreams = cache.get(normalizedType, `${tmdbId}-stremfx`, season, episode);
+    if (cachedStreams) {
+      console.log(`[Resolver-StremFx] Cache hit for ${normalizedType} ${tmdbId} S:${season} E:${episode} - returned ${cachedStreams.length} streams`);
+      return res.json({ success: true, fromCache: true, count: cachedStreams.length, streams: cachedStreams });
+    }
+  }
+
+  try {
+    const imdbId = await resolveImdbId(normalizedType, tmdbId);
+    const prov = getProvider('stremfx');
+    if (!prov || !prov.enabled) {
+      return res.status(400).json({ success: false, error: 'STREMFX_DISABLED', message: 'StremFx provider is disabled' });
+    }
+
+    console.log(`[Resolver-StremFx] Running provider for tmdbId: ${tmdbId}`);
+    const streams = await prov.fetch({ tmdbId, type: providerType, season, episode, imdbId, sr: req.query.sr || null, filters: {} });
+
+    if (Array.isArray(streams) && streams.length > 0) {
+      let filtered = applyFilters(streams, 'stremfx', config.minQualities, config.excludeCodecs);
+      if (filtered.length > 0) {
+        // Deduplicate
+        const uniqueStreams = [];
+        const seenUrls = new Set();
+        for (const s of filtered) {
+          if (!seenUrls.has(s.url)) {
+            seenUrls.add(s.url);
+            uniqueStreams.push(s);
+          }
+        }
+        const verifiedStreams = await verifyStreamsInParallel(uniqueStreams);
+        cache.set(normalizedType, `${tmdbId}-stremfx`, season, episode, verifiedStreams);
+        console.log(`[Resolver-StremFx] Resolved, verified & cached ${verifiedStreams.length} stream(s) for ${tmdbId}`);
+        return res.json({
+          success: true,
+          tmdbId,
+          imdbId,
+          fromCache: false,
+          count: verifiedStreams.length,
+          streams: verifiedStreams
+        });
+      }
+    }
+    
+    return res.json({ success: true, fromCache: false, count: 0, streams: [] });
+
+  } catch (err) {
+    console.error('[Resolver-StremFx] Error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: 'STREMFX_RESOLVE_ERROR', message: err.message });
+    }
+  }
+}
+
 module.exports = {
   resolveFast,
   resolveAll,
   resolveFastVidzeeStream,
+  resolveNxsha,
+  resolveStremFx,
   formatStreamsHelper,
   getMetadata
 };
@@ -293,4 +442,79 @@ async function getMetadata(req, res) {
   } catch (e) {
     res.json({ success: false, title: `${type.toUpperCase()} - ${id}` });
   }
+}
+
+// Helper to preflight test if a stream link is alive
+async function isStreamAlive(stream) {
+  if (!stream || !stream.url) return false;
+  
+  // Reject unplayable formats in browser
+  const lowerUrl = stream.url.toLowerCase();
+  if (lowerUrl.includes('.mkv') || lowerUrl.includes('.avi') || lowerUrl.includes('.flv')) {
+    console.log(`[Preflight-BE] Excluding unplayable format: ${stream.url}`);
+    return false;
+  }
+
+  const axios = require('axios');
+  try {
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      ...(stream.headers || {})
+    };
+
+    // Try HEAD request first
+    let response;
+    try {
+      response = await axios.head(stream.url, {
+        headers,
+        timeout: 2500,
+        validateStatus: (status) => status >= 200 && status < 400
+      });
+    } catch (e) {
+      // Fallback to GET requesting first few bytes
+      const CancelToken = axios.CancelToken;
+      const source = CancelToken.source();
+      
+      const getPromise = axios.get(stream.url, {
+        headers: {
+          ...headers,
+          'Range': 'bytes=0-1024'
+        },
+        timeout: 2500,
+        cancelToken: source.token,
+        validateStatus: (status) => status >= 200 && status < 400
+      });
+
+      response = await getPromise;
+      source.cancel('Check complete');
+    }
+
+    if (response && response.status >= 200 && response.status < 400) {
+      const ct = (response.headers['content-type'] || '').toLowerCase();
+      if (ct.includes('application/json') || (ct.includes('text/html') && !stream.url.includes('.m3u8'))) {
+        return false;
+      }
+      return true;
+    }
+    return false;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function verifyStreamsInParallel(streams) {
+  if (!Array.isArray(streams) || streams.length === 0) return [];
+  console.log(`[Preflight-BE] Verifying ${streams.length} stream(s) on backend...`);
+  const t0 = Date.now();
+  
+  const checkPromises = streams.map(async (stream) => {
+    const alive = await isStreamAlive(stream);
+    return alive ? stream : null;
+  });
+  
+  const results = await Promise.all(checkPromises);
+  const verified = results.filter(Boolean);
+  
+  console.log(`[Preflight-BE] Verification completed in ${Date.now() - t0}ms. ${verified.length}/${streams.length} stream(s) are alive.`);
+  return verified;
 }

@@ -96,6 +96,23 @@ async function getNxshaStreams(tmdbId, mediaType = 'movie', seasonNum = null, ep
           
           for (const s of sources) {
             if (!s.url || s.type === 'embed') continue;
+
+            let finalUrl = s.url;
+            if (finalUrl.includes('proxy.valhallastream.dpdns.org')) {
+              try {
+                const parsedUrl = new URL(finalUrl);
+                const innerUrl = parsedUrl.searchParams.get('url');
+                if (innerUrl) {
+                  finalUrl = `https://xbm.robotz-server.workers.dev/?url=${encodeURIComponent(innerUrl)}`;
+                }
+              } catch (e) {
+                // fallback to original
+              }
+            } else if (finalUrl.includes('workers.dev/?url=')) {
+              finalUrl = finalUrl.replace(/https:\/\/[a-zA-Z0-9-.]+\.workers\.dev\/\?url=/, 'https://xbm.robotz-server.workers.dev/?url=');
+            } else if (finalUrl.includes('bcdnxw.hakunaymatata.com') && !finalUrl.includes('xbm.robotz-server.workers.dev')) {
+              finalUrl = `https://xbm.robotz-server.workers.dev/?url=${encodeURIComponent(finalUrl)}`;
+            }
             
             // Format Quality
             let qLabel = 'Auto';
@@ -111,7 +128,7 @@ async function getNxshaStreams(tmdbId, mediaType = 'movie', seasonNum = null, ep
             allStreams.push({
               name: `Nxsha - ${server.name}`,
               title: s.label || s.quality || `Nxsha ${server.name}`,
-              url: s.url,
+              url: finalUrl,
               quality: qLabel,
               provider: 'Nxsha',
               headers: s.headers || null

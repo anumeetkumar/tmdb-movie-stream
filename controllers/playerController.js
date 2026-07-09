@@ -54,4 +54,92 @@ async function playStream(req, res) {
   res.send(renderPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, fastStreamUrl, posterUrl, isEmbed));
 }
 
-module.exports = { playStream };
+async function playStreamNxsha(req, res) {
+  const { type, id } = req.params;
+  const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
+  const extractNum = (val) => {
+    if (!val) return null;
+    const m = String(val).match(/\d+/);
+    return m ? Number(m[0]) : null;
+  };
+
+  const season = req.query.season ? extractNum(req.query.season) : (req.query.s ? extractNum(req.query.s) : null);
+  const episode = req.query.episode ? extractNum(req.query.episode) : (req.query.e ? extractNum(req.query.e) : null);
+
+  // 1. Fetch TMDB Metadata only
+  let mediaTitle = `${type.toUpperCase()} - ${id}`;
+  let mediaSubtitle = '';
+  let posterUrl = '';
+  try {
+    const keys = config.tmdbApiKeys && config.tmdbApiKeys.length ? config.tmdbApiKeys : [config.tmdbApiKey];
+    const activeKey = keys[Math.floor(Math.random() * keys.length)];
+    if (activeKey) {
+      const { data } = await axios.get(`https://api.themoviedb.org/3/${normalizedType}/${id}?api_key=${activeKey}`, { timeout: 4000 });
+      mediaTitle = data.title || data.name || mediaTitle;
+      mediaSubtitle = data.tagline || data.overview || '';
+      if (mediaSubtitle.length > 150) mediaSubtitle = mediaSubtitle.substring(0, 150) + '...';
+      if (data.backdrop_path) posterUrl = `https://image.tmdb.org/t/p/w1280${data.backdrop_path}`;
+      if (season !== null && episode !== null) mediaTitle += ` (S${season}E${episode})`;
+    }
+  } catch (e) { /* Ignore metadata errors */ }
+
+  // 2. Build the resolve URL (exclusively for nxsha resolver)
+  let resolveUrl = `/api/resolve-nxsha/${normalizedType}/${id}`;
+  const params = [];
+  if (season !== null) params.push(`season=${season}`);
+  if (episode !== null) params.push(`episode=${episode}`);
+  if (params.length) {
+    resolveUrl += `?${params.join('&')}`;
+  }
+
+  // 3. Render page immediately
+  const isEmbed = req.query.embed === 'true' || req.originalUrl.startsWith('/embed') || req.originalUrl.includes('/nxsha/embed');
+  const { renderNxshaPlayerPage } = require('../views/playerTemplates');
+  res.send(renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl, isEmbed, 'Nxsha'));
+}
+
+async function playStreamStremFx(req, res) {
+  const { type, id } = req.params;
+  const normalizedType = type === 'series' || type === 'tv' ? 'tv' : 'movie';
+  const extractNum = (val) => {
+    if (!val) return null;
+    const m = String(val).match(/\d+/);
+    return m ? Number(m[0]) : null;
+  };
+
+  const season = req.query.season ? extractNum(req.query.season) : (req.query.s ? extractNum(req.query.s) : null);
+  const episode = req.query.episode ? extractNum(req.query.episode) : (req.query.e ? extractNum(req.query.e) : null);
+
+  // 1. Fetch TMDB Metadata only
+  let mediaTitle = `${type.toUpperCase()} - ${id}`;
+  let mediaSubtitle = '';
+  let posterUrl = '';
+  try {
+    const keys = config.tmdbApiKeys && config.tmdbApiKeys.length ? config.tmdbApiKeys : [config.tmdbApiKey];
+    const activeKey = keys[Math.floor(Math.random() * keys.length)];
+    if (activeKey) {
+      const { data } = await axios.get(`https://api.themoviedb.org/3/${normalizedType}/${id}?api_key=${activeKey}`, { timeout: 4000 });
+      mediaTitle = data.title || data.name || mediaTitle;
+      mediaSubtitle = data.tagline || data.overview || '';
+      if (mediaSubtitle.length > 150) mediaSubtitle = mediaSubtitle.substring(0, 150) + '...';
+      if (data.backdrop_path) posterUrl = `https://image.tmdb.org/t/p/w1280${data.backdrop_path}`;
+      if (season !== null && episode !== null) mediaTitle += ` (S${season}E${episode})`;
+    }
+  } catch (e) { /* Ignore metadata errors */ }
+
+  // 2. Build the resolve URL (exclusively for stremfx resolver)
+  let resolveUrl = `/api/resolve-stremfx/${normalizedType}/${id}`;
+  const params = [];
+  if (season !== null) params.push(`season=${season}`);
+  if (episode !== null) params.push(`episode=${episode}`);
+  if (params.length) {
+    resolveUrl += `?${params.join('&')}`;
+  }
+
+  // 3. Render page immediately
+  const isEmbed = req.query.embed === 'true' || req.originalUrl.startsWith('/embed') || req.originalUrl.includes('/stremfx/embed');
+  const { renderNxshaPlayerPage } = require('../views/playerTemplates');
+  res.send(renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl, isEmbed, 'StremFx'));
+}
+
+module.exports = { playStream, playStreamNxsha, playStreamStremFx };
