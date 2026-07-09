@@ -66,8 +66,26 @@ async function getNxshaStreams(tmdbId, mediaType = 'movie', seasonNum = null, ep
       return [];
     }
 
-    // Step 2: Query sources from all servers concurrently
-    const promises = serversList.map(async (server) => {
+    // Helper to execute promises with a concurrency limit
+    async function runWithConcurrencyLimit(limit, items, fn) {
+      const results = [];
+      const executing = [];
+      for (const item of items) {
+        const p = fn(item);
+        results.push(p);
+        if (limit <= items.length) {
+          const e = p.then(() => executing.splice(executing.indexOf(e), 1));
+          executing.push(e);
+          if (executing.length >= limit) {
+            await Promise.race(executing);
+          }
+        }
+      }
+      return Promise.allSettled(results);
+    }
+
+    // Step 2: Query sources from all servers concurrently with a limit of 5 to prevent rate limits
+    await runWithConcurrencyLimit(5, serversList, async (server) => {
       const sourcePayload = {
         ex_lang: "",
         provider: server.scraper,
@@ -140,7 +158,6 @@ async function getNxshaStreams(tmdbId, mediaType = 'movie', seasonNum = null, ep
       }
     });
 
-    await Promise.allSettled(promises);
     console.log(`[Nxsha] Successfully resolved ${allStreams.length} stream(s).`);
     return allStreams;
 
