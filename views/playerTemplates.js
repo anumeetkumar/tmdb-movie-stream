@@ -619,23 +619,87 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
         #player { width: 100%; height: 100%; }
         #loading-overlay {
             position: absolute; inset: 0;
-            background: rgba(13,8,22,0.96);
+            background: #08050e;
             display: flex; flex-direction: column;
             align-items: center; justify-content: center;
-            z-index: 20; gap: 14px; border-radius: 16px;
+            z-index: 100; padding: 24px;
+            color: #fff; text-align: center;
+            border-radius: 16px;
             transition: opacity 0.4s ease;
         }
         #loading-overlay.hidden { opacity: 0; pointer-events: none; }
-        .load-spinner {
-            width: 44px; height: 44px;
-            border: 4px solid rgba(255,255,255,0.1);
-            border-left-color: #a12cfc;
-            border-radius: 50%;
-            animation: spin 0.9s linear infinite;
+        .load-title {
+            font-size: 24px; font-weight: 800; margin-bottom: 6px;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff 0%, #bcaed2 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .load-text { color: #bcaed2; font-size: 14px; font-weight: 600; }
-        .load-subtext { color: #64557f; font-size: 12px; }
+        .load-status-text {
+            font-size: 13px; color: #bcaed2; margin-bottom: 20px;
+            font-weight: 500;
+        }
+        .progress-track {
+            width: 80%; max-width: 440px; height: 5px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 3px; overflow: hidden;
+            margin-bottom: 8px; position: relative;
+        }
+        .progress-fill {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #f5a623, #f8e71c);
+            box-shadow: 0 0 10px rgba(245, 166, 35, 0.4);
+            border-radius: 3px;
+            transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .progress-stats {
+            width: 80%; max-width: 440px;
+            display: flex; justify-content: space-between;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+            margin-bottom: 24px;
+        }
+        .stats-analyzed { color: rgba(255,255,255,0.3); }
+        .stats-remaining { color: #f5a623; }
+        
+        .server-grid {
+            width: 100%; max-width: 640px;
+            max-height: 180px; overflow-y: auto;
+            display: flex; flex-wrap: wrap; justify-content: center;
+            gap: 10px; padding: 4px;
+        }
+        .server-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 8px 12px;
+            display: flex; align-items: center; gap: 6px;
+            min-width: 100px; justify-content: center;
+            font-size: 11px; font-weight: 600;
+            color: rgba(255,255,255,0.3);
+            transition: all 0.3s ease;
+        }
+        .server-card.checking {
+            border-color: rgba(245, 166, 35, 0.25);
+            color: rgba(255,255,255,0.6);
+        }
+        .server-card.validated {
+            background: rgba(46, 204, 113, 0.04);
+            border-color: rgba(46, 204, 113, 0.25);
+            color: #2ecc71;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.1);
+            transform: translateY(-1px);
+        }
+        .server-card.failed {
+            opacity: 0.15;
+            transform: scale(0.96);
+        }
+        .check-icon {
+            width: 12px; height: 12px; fill: none; stroke: currentColor;
+            stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round;
+            display: none;
+        }
+        .server-card.validated .check-icon {
+            display: block;
+        }
         .footer {
             display: flex; justify-content: space-between; align-items: center;
             font-size: 13px; color: #8e7fa5; flex-wrap: wrap; gap: 10px;
@@ -777,9 +841,18 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
         <div class="player-wrapper">
             <video id="player" class="video-js vjs-default-skin vjs-big-play-centered vjs-fill" controls playsinline crossorigin="anonymous" style="width: 100%; height: 100%; object-fit: contain; background: #000;"></video>
             <div id="loading-overlay">
-                <div class="load-spinner"></div>
-                <div class="load-text" id="load-text">Resolving multi-server sources from ${brandName}...</div>
-                <div class="load-subtext">Initializing connections in background</div>
+                <div class="load-title" id="overlay-title">${mediaTitle}</div>
+                <div class="load-status-text" id="overlay-status">Scanning high-speed servers...</div>
+                <div class="progress-track">
+                    <div class="progress-fill" id="overlay-progress-fill"></div>
+                </div>
+                <div class="progress-stats">
+                    <span class="stats-analyzed" id="overlay-analyzed">0 ANALYZED</span>
+                    <span class="stats-remaining" id="overlay-remaining">0 REMAINING</span>
+                </div>
+                <div class="server-grid" id="overlay-server-grid">
+                    <!-- Badges populated dynamically -->
+                </div>
             </div>
         </div>
         <div class="footer">
@@ -890,31 +963,53 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
             statusEl.textContent = alive + '/' + streams.length + ' server(s) alive';
         }
 
+        var completedCount = 0;
         var hasStartedPlaying = false;
 
         async function preflightCheck(url, idx) {
+            var card = document.getElementById('card-' + idx);
+            if (card) card.className = 'server-card checking';
+            
+            var isSuccess = false;
             try {
                 var ctrl = new AbortController();
                 var tid  = setTimeout(function() { ctrl.abort(); }, 7000);
                 var res  = await fetch(url, { signal: ctrl.signal });
                 clearTimeout(tid);
                 
-                if (!res.ok) { markFailed(idx); return false; }
-                var ct = (res.headers.get('content-type') || '').toLowerCase();
-                if (ct.indexOf('application/json') !== -1 || (ct.indexOf('text/html') !== -1 && url.indexOf('.m3u8') === -1)) {
-                    markFailed(idx);
-                    return false;
+                if (res.ok) {
+                    var ct = (res.headers.get('content-type') || '').toLowerCase();
+                    if (ct.indexOf('application/json') === -1 && (ct.indexOf('text/html') === -1 || url.indexOf('.m3u8') !== -1)) {
+                        isSuccess = true;
+                    }
                 }
+            } catch (e) {}
+
+            completedCount++;
+            var remainingCount = streams.length - completedCount;
+            var percentage = Math.round((completedCount / streams.length) * 100);
+            
+            var fillEl = document.getElementById('overlay-progress-fill');
+            var analyzedEl = document.getElementById('overlay-analyzed');
+            var remainingEl = document.getElementById('overlay-remaining');
+            
+            if (fillEl) fillEl.style.width = percentage + '%';
+            if (analyzedEl) analyzedEl.textContent = completedCount + ' ANALYZED';
+            if (remainingEl) remainingEl.textContent = remainingCount + ' REMAINING';
+
+            if (isSuccess) {
+                if (card) card.className = 'server-card validated';
+                streams[idx].isValidated = true;
                 
                 if (!hasStartedPlaying) {
                     hasStartedPlaying = true;
                     currentIdx = idx;
-                    select.value = String(idx);
                     playStream(streams[idx]);
                     hideOverlay();
                 }
                 return true;
-            } catch (e) {
+            } else {
+                if (card) card.className = 'server-card failed';
                 markFailed(idx);
                 return false;
             }
@@ -1050,10 +1145,33 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
                 }
 
                 streams = fetched;
-                populateSelect(streams);
-                statusEl.textContent = streams.length + ' server(s) available';
-
+                
+                // Reset progress tracking
+                completedCount = 0;
                 hasStartedPlaying = false;
+                failedSet.clear();
+
+                // Populate checking grid visual cards
+                var grid = document.getElementById('overlay-server-grid');
+                if (grid) {
+                    grid.innerHTML = '';
+                    streams.forEach(function(s, idx) {
+                        var card = document.createElement('div');
+                        card.className = 'server-card';
+                        card.id = 'card-' + idx;
+                        
+                        var cleanName = (s.title || s.name || 'Server').split('|')[0].trim();
+                        card.innerHTML = '<svg class="check-icon" viewBox="0 0 24 24">' +
+                                         '<path d="M20 6L9 17l-5-5" stroke="#2ecc71" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>' +
+                                         '</svg>' +
+                                         '<span>' + cleanName + '</span>';
+                        grid.appendChild(card);
+                    });
+                }
+                
+                document.getElementById('overlay-progress-fill').style.width = '0%';
+                document.getElementById('overlay-analyzed').textContent = '0 ANALYZED';
+                document.getElementById('overlay-remaining').textContent = streams.length + ' REMAINING';
 
                 // Run concurrent preflight checks in one go (parallel)
                 var checks = streams.map(function(s, i) {
@@ -1061,21 +1179,25 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
                     return preflightCheck(pUrl, i);
                 });
 
-                // Fallback check after all preflights settle
+                // Rebuild dropdown with only valid streams when complete
                 Promise.all(checks).then(function() {
-                    if (!hasStartedPlaying) {
-                        var firstWorking = 0;
-                        while (firstWorking < streams.length && failedSet.has(firstWorking)) {
-                            firstWorking++;
-                        }
-                        if (firstWorking < streams.length) {
-                            hasStartedPlaying = true;
-                            currentIdx = firstWorking;
-                            select.value = String(firstWorking);
-                            playStream(streams[firstWorking]);
-                            hideOverlay();
-                        } else {
-                            // Fallback to first stream if all preflight checks failed or were blocked
+                    var validStreams = streams.filter(function(s) { return s.isValidated; });
+                    if (validStreams.length > 0) {
+                        // Find playing index
+                        var playingStream = streams[currentIdx];
+                        var newIdx = validStreams.indexOf(playingStream);
+                        if (newIdx === -1) newIdx = 0;
+                        
+                        streams = validStreams;
+                        populateSelect(streams);
+                        currentIdx = newIdx;
+                        select.value = String(newIdx);
+                        statusEl.textContent = streams.length + ' server(s) active';
+                    } else {
+                        // Fallback: keep all
+                        populateSelect(streams);
+                        statusEl.textContent = 'All validation failed. Reverting to all servers.';
+                        if (!hasStartedPlaying) {
                             hasStartedPlaying = true;
                             currentIdx = 0;
                             select.value = '0';
