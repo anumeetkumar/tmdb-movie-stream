@@ -890,20 +890,33 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
             statusEl.textContent = alive + '/' + streams.length + ' server(s) alive';
         }
 
+        var hasStartedPlaying = false;
+
         async function preflightCheck(url, idx) {
-            if (!isProxy(url)) return; 
             try {
                 var ctrl = new AbortController();
-                var tid  = setTimeout(function() { ctrl.abort(); }, 8000);
+                var tid  = setTimeout(function() { ctrl.abort(); }, 7000);
                 var res  = await fetch(url, { signal: ctrl.signal });
                 clearTimeout(tid);
-                if (!res.ok) { markFailed(idx); return; }
+                
+                if (!res.ok) { markFailed(idx); return false; }
                 var ct = (res.headers.get('content-type') || '').toLowerCase();
-                if (ct.indexOf('application/json') !== -1 || ct.indexOf('text/html') !== -1) {
-                    markFailed(idx); return;
+                if (ct.indexOf('application/json') !== -1 || (ct.indexOf('text/html') !== -1 && url.indexOf('.m3u8') === -1)) {
+                    markFailed(idx);
+                    return false;
                 }
+                
+                if (!hasStartedPlaying) {
+                    hasStartedPlaying = true;
+                    currentIdx = idx;
+                    select.value = String(idx);
+                    playStream(streams[idx]);
+                    hideOverlay();
+                }
+                return true;
             } catch (e) {
                 markFailed(idx);
+                return false;
             }
         }
 
@@ -1040,16 +1053,37 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
                 populateSelect(streams);
                 statusEl.textContent = streams.length + ' server(s) available';
 
-                currentIdx = 0;
-                select.value = '0';
-                hideOverlay();
-                initPlayer(streams[0]);
+                hasStartedPlaying = false;
 
-                // Rely on Backend Preflight checks — no need to check on frontend!
-                // streams.forEach(function(s, i) {
-                //     var pUrl = getPlayableUrl(s);
-                //     if (isProxy(pUrl)) preflightCheck(pUrl, i);
-                // });
+                // Run concurrent preflight checks in one go (parallel)
+                var checks = streams.map(function(s, i) {
+                    var pUrl = getPlayableUrl(s);
+                    return preflightCheck(pUrl, i);
+                });
+
+                // Fallback check after all preflights settle
+                Promise.all(checks).then(function() {
+                    if (!hasStartedPlaying) {
+                        var firstWorking = 0;
+                        while (firstWorking < streams.length && failedSet.has(firstWorking)) {
+                            firstWorking++;
+                        }
+                        if (firstWorking < streams.length) {
+                            hasStartedPlaying = true;
+                            currentIdx = firstWorking;
+                            select.value = String(firstWorking);
+                            playStream(streams[firstWorking]);
+                            hideOverlay();
+                        } else {
+                            // Fallback to first stream if all preflight checks failed or were blocked
+                            hasStartedPlaying = true;
+                            currentIdx = 0;
+                            select.value = '0';
+                            playStream(streams[0]);
+                            hideOverlay();
+                        }
+                    }
+                });
 
             } catch (err) {
                 console.error('[Player] loadStreams error:', err);
