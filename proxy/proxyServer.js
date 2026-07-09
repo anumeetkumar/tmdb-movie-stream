@@ -469,8 +469,9 @@ function processStreamsForProxy(streams, serverUrl) {
     return streams.map(s => {
         if (!s || !s.url || typeof s.url !== 'string') return s;
         const original = extractOriginalUrl(s.url);
-        const headers = s.headers || {};
-        const hParam = Object.keys(headers).length ? `&headers=${encodeURIComponent(JSON.stringify(headers))}` : '';
+        if (original.includes('robotz-server.workers.dev')) {
+            return { ...s, url: original };
+        }
         let host = '';
         try {
             host = new URL(original).hostname.toLowerCase();
@@ -480,14 +481,8 @@ function processStreamsForProxy(streams, serverUrl) {
         if (host.includes('111477.xyz') || host.endsWith('fvncw.com') || host.endsWith('bxncw.com')) {
             return s; // DahmerMovies/Vidzee CDNs play directly without proxy to avoid 429s/403s
         }
-        // Force specific hosts through ts-proxy (direct file style) even without extension
-        if (host.includes('pixeldrain.') || host === 'video-downloads.googleusercontent.com') {
-            return { ...s, url: `${serverUrl}/ts-proxy?url=${encodeURIComponent(original)}${hParam}` };
-        }
-        if (/\.(mp4|mkv)(\?|$)/i.test(original)) {
-            return { ...s, url: `${serverUrl}/ts-proxy?url=${encodeURIComponent(original)}${hParam}` };
-        }
-        return { ...s, url: `${serverUrl}/m3u8-proxy?url=${encodeURIComponent(original)}${hParam}` };
+        // Use public Cloudflare worker proxy to bypass CORS, offload bandwidth and prevent rate limiting
+        return { ...s, url: `https://xbm.robotz-server.workers.dev/?url=${encodeURIComponent(original)}` };
     });
 }
 

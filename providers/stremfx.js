@@ -26,6 +26,14 @@ function decodeData(ciphertext) {
   return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
 }
 
+const isVercel = !!process.env.VERCEL;
+function getFetchUrl(rawUrl) {
+  if (isVercel) {
+    return `https://xbm.robotz-server.workers.dev/?url=${encodeURIComponent(rawUrl)}`;
+  }
+  return rawUrl;
+}
+
 async function getStremFxStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = null) {
   console.log(`[StremFx] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}`);
   
@@ -46,7 +54,7 @@ async function getStremFxStreams(tmdbId, mediaType = 'movie', seasonNum = null, 
   const allStreams = [];
   try {
     const sourceQ = encodeData(sourcePayload);
-    const sourcesUrl = `https://nxsha.space/api/sources?q=${sourceQ}`;
+    const sourcesUrl = getFetchUrl(`https://nxsha.space/api/sources?q=${sourceQ}`);
 
     const sourcesRes = await axios.get(sourcesUrl, {
       headers: {

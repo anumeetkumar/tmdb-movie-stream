@@ -844,26 +844,17 @@ function renderNxshaPlayerPage(mediaTitle, mediaSubtitle, resolveUrl, posterUrl,
         function getPlayableUrl(stream) {
             if (!stream || !stream.url) return '';
             var original = stream.url;
-            if (original.indexOf('/m3u8-proxy') !== -1 || original.indexOf('/ts-proxy') !== -1) {
+            if (original.indexOf('robotz-server.workers.dev') !== -1) {
                 return original;
             }
             var host = '';
             try {
                 host = new URL(original).hostname.toLowerCase();
             } catch (e) {}
-            if (host.includes('111477.xyz') || host.endsWith('fvncw.com') || host.endsWith('bxncw.com') || host.includes('robotz-server.workers.dev')) {
+            if (host.includes('111477.xyz') || host.endsWith('fvncw.com') || host.endsWith('bxncw.com')) {
                 return original;
             }
-            var headers = stream.headers || {};
-            var hParam = Object.keys(headers).length ? '&headers=' + encodeURIComponent(JSON.stringify(headers)) : '';
-            var serverUrl = window.location.origin;
-            if (host.includes('pixeldrain.') || host === 'video-downloads.googleusercontent.com') {
-                return serverUrl + '/ts-proxy?url=' + encodeURIComponent(original) + hParam;
-            }
-            if (/\.(mp4|mkv)(\?|$)/i.test(original)) {
-                return serverUrl + '/ts-proxy?url=' + encodeURIComponent(original) + hParam;
-            }
-            return serverUrl + '/m3u8-proxy?url=' + encodeURIComponent(original) + hParam;
+            return 'https://xbm.robotz-server.workers.dev/?url=' + encodeURIComponent(original);
         }
 
         function isHls(url) {

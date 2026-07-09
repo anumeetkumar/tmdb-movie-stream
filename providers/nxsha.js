@@ -26,6 +26,14 @@ function decodeData(ciphertext) {
   return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
 }
 
+const isVercel = !!process.env.VERCEL;
+function getFetchUrl(rawUrl) {
+  if (isVercel) {
+    return `https://xbm.robotz-server.workers.dev/?url=${encodeURIComponent(rawUrl)}`;
+  }
+  return rawUrl;
+}
+
 async function getNxshaStreams(tmdbId, mediaType = 'movie', seasonNum = null, episodeNum = null) {
   console.log(`[Nxsha] Fetching streams for TMDB ID: ${tmdbId}, Type: ${mediaType}`);
   
@@ -45,7 +53,7 @@ async function getNxshaStreams(tmdbId, mediaType = 'movie', seasonNum = null, ep
   const allStreams = [];
   try {
     const serverQ = encodeData(serverPayload);
-    const serversUrl = `https://nxsha.space/api/servers?q=${serverQ}`;
+    const serversUrl = getFetchUrl(`https://nxsha.space/api/servers?q=${serverQ}`);
     
     const serversRes = await axios.get(serversUrl, {
       headers: {
@@ -97,7 +105,7 @@ async function getNxshaStreams(tmdbId, mediaType = 'movie', seasonNum = null, ep
       };
 
       const sourceQ = encodeData(sourcePayload);
-      const sourcesUrl = `https://nxsha.space/api/sources?q=${sourceQ}`;
+      const sourcesUrl = getFetchUrl(`https://nxsha.space/api/sources?q=${sourceQ}`);
 
       try {
         const sourcesRes = await axios.get(sourcesUrl, {
