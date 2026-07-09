@@ -44,6 +44,26 @@ function applyFilters(streams, providerName, minQualitiesConfig, excludeCodecsCo
   }
   let filtered = filterByMinQuality(streams, minQuality);
   filtered = filterByCodecs(filtered, excludeCodecsConfig);
+
+  // Filter out unplayable browser formats (.mkv, .avi, .flv) globally
+  filtered = filtered.filter(s => {
+    if (!s || !s.url) return false;
+    const url = s.url.toLowerCase();
+    if (url.includes('.mkv') || url.includes('.avi') || url.includes('.flv')) return false;
+    return true;
+  });
+
+  // Filter out massive streams (> 10GB) globally as they cannot stream smoothly in browsers
+  filtered = filtered.filter(s => {
+    const txt = s.title || s.name || '';
+    const match = txt.match(/(\d+(?:\.\d+)?)\s*GB/i);
+    if (match) {
+      const sizeGB = parseFloat(match[1]);
+      if (sizeGB > 10.0) return false;
+    }
+    return true;
+  });
+
   return filtered;
 }
 module.exports = { applyFilters };

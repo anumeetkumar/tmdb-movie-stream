@@ -455,6 +455,22 @@ async function isStreamAlive(stream) {
     return false;
   }
 
+  // Reject massive files (> 10GB) that cannot be streamed smoothly in browsers
+  const isSizeTooLarge = (txt) => {
+    if (!txt || typeof txt !== 'string') return false;
+    const match = txt.match(/(\d+(?:\.\d+)?)\s*GB/i);
+    if (match) {
+      const sizeGB = parseFloat(match[1]);
+      if (sizeGB > 10.0) return true;
+    }
+    return false;
+  };
+
+  if (isSizeTooLarge(stream.title) || isSizeTooLarge(stream.name)) {
+    console.log(`[Preflight-BE] Excluding massive file size stream: ${stream.title || stream.name}`);
+    return false;
+  }
+
   const axios = require('axios');
   try {
     const headers = {
