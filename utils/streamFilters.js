@@ -55,7 +55,7 @@ function applyFilters(streams, providerName, minQualitiesConfig, excludeCodecsCo
 
   // Filter out massive streams (> 10GB) globally as they cannot stream smoothly in browsers
   filtered = filtered.filter(s => {
-    const txt = s.title || s.name || '';
+    const txt = String(s.title || s.name || '');
     const match = txt.match(/(\d+(?:\.\d+)?)\s*GB/i);
     if (match) {
       const sizeGB = parseFloat(match[1]);
